@@ -34,6 +34,8 @@ export const enum IpcEvents {
     SET_PRESETS = "VencordSetPresets",
     THEME_UPDATE = "VencordThemeUpdate",
     OPEN_EXTERNAL = "VencordOpenExternal",
+    DROVER_STATUS = "Client971DroverStatus",
+    DROVER_DIRECT = "Client971DroverDirect",
     GET_UPDATES = "VencordGetUpdates",
     GET_REPO = "VencordGetRepo",
     UPDATE = "VencordUpdate",

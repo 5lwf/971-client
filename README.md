@@ -4,6 +4,18 @@
 
 **Credits to @kk5a - kbk**
 
+## Windows download and updates
+
+[Download the latest 971 Client installer](https://github.com/5lwf/971-client/releases/latest). Quit Discord before installing. In **971 Client Settings → Updater**, enable **Auto update** to download new releases in the background. Restart Discord to apply them. Updates are checked at launch and every 30 minutes.
+
+Pushes to this repository's `main` branch run the **Publish 971 Client** workflow. A successful build publishes the client archives and Windows installer. Installed clients update from these verified release files; unfinished or failed builds are not installed.
+
+## Drover
+
+On Windows, open **971 Client Settings → Drover** and press **Direct**. Finish any active call first: Discord will close and reopen while Direct is applied. The client downloads the official Drover v0.9 ZIP, verifies its SHA-256 checksum, and installs its `version.dll`, empty-proxy `drover.ini`, and optional packet beside the active Discord executable. Existing configuration is backed up before it is replaced. An unrelated `version.dll` is not overwritten.
+
+Drover is developed by [hdrover](https://github.com/hdrover/discord-drover). It is downloaded from the upstream release when requested, rather than bundled in 971 Client. Discord host updates may require applying Direct again. Network effectiveness depends on the connection.
+
 This project retains the original open-source licenses and required third-party notices in `LICENSE` and the included notice files.
 
 ## Build from source

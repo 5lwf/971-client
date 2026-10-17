@@ -1,0 +1,45 @@
+name: Publish 971 Client
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: client-release
+  cancel-in-progress: true
+jobs:
+  release:
+    runs-on: windows-latest
+    env:
+      TESTCORD_REMOTE: 5lwf/971-client
+      TESTCORD_HASH: ${{ github.sha }}
+      TESTCORD_BRANCH: main
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 12.5.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: node --import tsx --test tests/clientRelease.test.ts
+      - run: node --test tests/nativeClient.test.mjs
+      - run: pnpm buildStandalone
+      - name: Build Windows installer
+        shell: pwsh
+        run: |
+          Invoke-WebRequest 'https://github.com/TestcordDev/TestCord/releases/latest/download/Windows_Testcord_installer-rel_cli.exe' -OutFile installer-cli.exe
+          ./scripts/buildWindowsCliInstaller.ps1 -CliInstallerPath ./installer-cli.exe
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: client-${{ github.sha }}
+          name: 971 Client ${{ github.sha }}
+          body: "Automatic main branch build. Installed clients download this update when Auto update is enabled. Restart Discord to apply it."
+          make_latest: true
+          files: |
+            dist/desktop.asar
+            dist/equibop.asar
+            dist/Installer/971 Client Setup.exe

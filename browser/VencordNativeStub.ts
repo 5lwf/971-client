@@ -41,6 +41,10 @@ const themeStore = DataStore.createStore("VencordThemes", "VencordThemeData");
 
 // probably should make this less cursed at some point
 window.VencordNative = {
+    drover: {
+        status: async () => ({ supported: false, direct: false, message: "Drover requires Discord desktop on Windows." }),
+        direct: async () => { throw new Error("Drover requires Discord desktop on Windows."); },
+    },
     themes: {
         uploadTheme: (fileName: string, fileData: string) => DataStore.set(fileName, fileData, themeStore),
         deleteTheme: (fileName: string) => DataStore.del(fileName, themeStore),

@@ -42,6 +42,11 @@ export default {
         openFolder: () => invoke<void>(IpcEvents.OPEN_THEMES_FOLDER),
     },
 
+    drover: {
+        status: () => invoke<{ supported: boolean; direct: boolean; message: string; }>(IpcEvents.DROVER_STATUS),
+        direct: () => invoke<void>(IpcEvents.DROVER_DIRECT),
+    },
+
     updater: {
         getUpdates: (branch?: string) => invoke<IpcRes<UpdateCheckResult>>(IpcEvents.GET_UPDATES, branch),
         update: (branch?: string) => invoke<IpcRes<UpdateOutcome>>(IpcEvents.UPDATE, branch),

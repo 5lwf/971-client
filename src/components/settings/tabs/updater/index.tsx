@@ -29,7 +29,7 @@ import { SettingsTab, wrapTab } from "@components/settings/tabs/BaseTab";
 import { Margins } from "@utils/margins";
 import { useAwaiter } from "@utils/react";
 import { getRepo, isNewer, UpdateLogger } from "@utils/updater";
-import { React, Select } from "@webpack/common";
+import { React } from "@webpack/common";
 
 import gitHash from "~git-hash";
 
@@ -97,12 +97,12 @@ function Updater() {
             <EquibopSection />
             <Heading className={Margins.top16}>Update Preferences</Heading>
             <Paragraph className={Margins.bottom20}>
-                Control how 971 Client keeps itself up to date. You can choose to update automatically in the background or be notified when new updates are available.
+                Updates come from 5lwf/971-client on GitHub. New builds download automatically when Auto update is enabled and take effect after restarting Discord.
             </Paragraph>
 
             <div className="vc-settings-switches">
                 <FormSwitch
-                    title="Automatically update"
+                    title="Auto update"
                     description="When enabled, 971 Client will automatically download and install updates in the background without asking for confirmation. You\'ll need to restart Discord to apply the changes."
                     value={settings.autoUpdate}
                     onChange={(v: boolean) => settings.autoUpdate = v}
@@ -117,24 +117,6 @@ function Updater() {
                     hideBorder
                 />
             </div>
-
-            <Divider className={Margins.top20} />
-
-            <Heading className={Margins.top20}>Branch</Heading>
-            <Paragraph className={Margins.bottom8}>
-                Choose which branch to receive updates from. Main is stable, dev is experimental, dev2 is the most unstable but gets updates fastest.
-            </Paragraph>
-            <Select
-                options={[
-                    { label: "main - The main and stable branch", value: "main" },
-                    { label: "dev - More experimental branch, something might break", value: "dev" },
-                    { label: "dev2 - Most exp branch, can brick ur whole updater but also u get updates the fastest", value: "dev2" }
-                ]}
-                placeholder="Select a branch"
-                select={v => settings.updaterBranch = v}
-                isSelected={v => v === settings.updaterBranch}
-                serialize={v => v}
-            />
 
             <Divider className={Margins.top20} />
 

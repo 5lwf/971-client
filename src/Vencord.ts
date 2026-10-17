@@ -233,9 +233,7 @@ async function init() {
         // out of being told about updates -- the exact users least likely to
         // notice a silent update. Poll whenever auto-update is enabled; the
         // once-per-session notification guard keeps it from nagging.
-        if (Settings.autoUpdate) {
-            setInterval(runUpdateCheck, 1000 * 60 * 30); // 30 minutes
-        }
+        setInterval(runUpdateCheck, 1000 * 60 * 30);
     }
 
     if (IS_DEV) {

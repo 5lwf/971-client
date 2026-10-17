@@ -17,6 +17,7 @@
 */
 
 import "./updater";
+import "./drover";
 import "./ipcPlugins";
 import "./settings";
 

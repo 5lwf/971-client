@@ -5,15 +5,12 @@
  */
 
 import { definePluginSettings, useSettings } from "@api/Settings";
-import { BackupRestoreIcon, BookmarkIcon, Client971Icon, CloudIcon, InfoIcon, LogIcon, PaintbrushIcon, PatchHelperIcon, PluginsIcon, SafetyIcon, UpdaterIcon } from "@components/Icons";
+import { BackupRestoreIcon, Client971Icon, CloudIcon, InfoIcon, PaintbrushIcon, PluginsIcon, SafetyIcon, UpdaterIcon } from "@components/Icons";
 import {
     BackupAndRestoreTab,
-    ChangelogTab,
     CloudTab,
-    HealthTab,
-    PatchHelperTab,
+    DroverTab,
     PluginsTab,
-    PresetsTab,
     PrivacySecurityPanel,
     StatsTab,
     ThemesTab,
@@ -738,32 +735,11 @@ export default definePlugin({
                 Icon: UpdaterIcon
             }),
             buildEntry({
-                key: "testcord_changelog",
-                title: "Changelog",
-                panelTitle: "971 Client Changelog",
-                Component: ChangelogTab,
-                Icon: LogIcon,
-            }),
-            buildEntry({
                 key: "testcord_stats",
                 title: "Stats",
                 panelTitle: "971 Client Stats",
                 Component: StatsTab,
                 Icon: InfoIcon,
-            }),
-            buildEntry({
-                key: "testcord_health",
-                title: "Plugin Health",
-                panelTitle: "Plugin Health",
-                Component: HealthTab,
-                Icon: SafetyIcon,
-            }),
-            buildEntry({
-                key: "testcord_presets",
-                title: "Presets",
-                panelTitle: "971 Client Presets",
-                Component: PresetsTab,
-                Icon: BookmarkIcon,
             }),
             buildEntry({
                 key: "testcord_cloud",
@@ -778,11 +754,11 @@ export default definePlugin({
                 Component: BackupAndRestoreTab,
                 Icon: BackupRestoreIcon
             }),
-            !IS_STANDALONE && PatchHelperTab && buildEntry({
-                key: "testcord_patch_helper",
-                title: "Patch Helper",
-                Component: PatchHelperTab,
-                Icon: PatchHelperIcon
+            !IS_WEB && buildEntry({
+                key: "testcord_drover",
+                title: "Drover",
+                Component: DroverTab,
+                Icon: SafetyIcon
             }),
             ...this.customEntries.map(buildEntry)
         ].filter(isTruthy);
