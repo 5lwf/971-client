@@ -47,6 +47,8 @@ To inject a local desktop build into Discord, use `pnpm inject` from the project
 
 ## Plugins
 
+**SpotifyLyricsStatus** follows the current Spotify lyric line in your custom status. Enable it from Plugins after reading the expandable API warning. Its update interval defaults to five seconds; quick lines may be skipped and frequent updates can still trigger rate limits. Pause playback or disable the plugin to restore your previous status. Keep LyricsStatus and AnimatedStatus disabled while using it. See [setup and behavior](src/testcordplugins/spotifyLyricsStatus/README.md).
+
 971 Client includes its existing plugin library and browser and desktop features. Plugins remain individually configurable in the client settings.
 
 ## Disclaimer
