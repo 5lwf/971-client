@@ -61,6 +61,17 @@ test("manual status changes are preserved and long Unicode lyrics fit the status
     writer.setText(null); await flush(); assert.equal(status.text, "manually edited");
 });
 
+test("a short retry delay does not override the configured minimum interval", async t => {
+    t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: 100000 });
+    let attempts = 0;
+    let status = { text: "original" };
+    const writer = new LyricStatusWriter({ read: () => status, write: async value => { if (++attempts === 1) throw { retry_after: 0 }; status = value; }, make: text => ({ text }), interval: () => 5000, onError: () => {} });
+    writer.setText("lyric"); await flush();
+    t.mock.timers.tick(4999); await flush(); assert.equal(attempts, 1);
+    t.mock.timers.tick(1); await flush(); assert.equal(attempts, 2);
+    writer.setText(null); t.mock.timers.tick(5000); await flush();
+});
+
 test("stopping during an in-flight status write restores instead of publishing the queued line", async t => {
     t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: 100000 });
     let complete: (() => void) | undefined;

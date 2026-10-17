@@ -90,7 +90,7 @@ export class LyricStatusWriter<T extends Status> {
             this.ownedText = restoring ? undefined : value.text;
             if (restoring) this.original = undefined;
         }, error => {
-            this.nextAt = (this.options.now?.() ?? Date.now()) + retryDelay(error);
+            this.nextAt = Math.max(this.nextAt, (this.options.now?.() ?? Date.now()) + retryDelay(error));
             if (restoring) {
                 this.original = undefined;
                 this.ownedText = undefined;
