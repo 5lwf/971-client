@@ -1,0 +1,42 @@
+.vc-jstr-warning {
+    margin-bottom: 12px;
+}
+
+.vc-jstr-add {
+    margin-bottom: 8px;
+}
+
+.vc-jstr-rules {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.vc-jstr-rule {
+    padding: 8px;
+    border: 1px solid var(--background-modifier-accent);
+    border-radius: 8px;
+}
+
+.vc-jstr-head {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.vc-jstr-input {
+    flex: 1;
+    min-width: 0;
+}
+
+.vc-jstr-delete:hover {
+    color: var(--status-danger);
+}
+
+.vc-jstr-editor {
+    margin-top: 8px;
+    height: 180px;
+    width: 100%;
+    border-radius: 8px;
+    overflow: hidden;
+}

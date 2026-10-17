@@ -1,0 +1,106 @@
+/*
+ * Vencord, a Discord client mod
+ * Copyright (c) 2026 Vendicated and contributors
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
+// Note: Auto-translated
+
+import { definePluginSettings } from "@api/Settings";
+import { OptionType } from "@utils/types";
+
+import { handleGameModeChange, PluginManagerControls } from "./PluginManager";
+
+// Settings definitions for PerformanceBoost.
+export const settings = definePluginSettings({
+    // Main toggle: applies runtime optimizations and disables other non-essential plugins.
+    // Note: do not name this "enabled" as Settings.plugins[name].enabled is reserved for plugin activation.
+    gameMode: {
+        type: OptionType.BOOLEAN, default: false,
+        description: "Enable performance / game mode (also disables other plugins except essentials and your exceptions; requires a restart)",
+        onChange: handleGameModeChange
+    },
+    // Exceptions button component
+    pluginManager: {
+        type: OptionType.COMPONENT,
+        description: "Choose which plugins stay enabled when performance mode is on.",
+        component: PluginManagerControls
+    },
+    // Comma-separated exceptions list
+    pluginKeep: {
+        type: OptionType.STRING, default: "", hidden: true,
+        description: "Comma-separated plugin names kept enabled (exceptions)."
+    },
+    // Snapshot of enabled plugins before toggling mode
+    pluginSaved: {
+        type: OptionType.STRING, default: "", hidden: true,
+        description: "JSON snapshot of plugins enabled before disabling the rest, restored when turned off."
+    },
+    // Auto-detect games option
+    autoDetectGames: {
+        type: OptionType.BOOLEAN, default: false,
+        description: "Automatically enable when a game is detected"
+    },
+    // Auto high CPU load monitor option
+    autoHighLoad: {
+        type: OptionType.BOOLEAN, default: false,
+        description: "Automatically enable performance mode when Discord's CPU usage stays above the threshold (checks every 30s while enabled, desktop only)",
+        onChange: enabled => window.dispatchEvent(new CustomEvent("971-performance-load-monitor-change", { detail: enabled }))
+    },
+    cpuThreshold: {
+        type: OptionType.SLIDER,
+        description: "CPU threshold (%) that triggers automatic performance mode (total across Discord processes)",
+        markers: [80, 120, 160, 220, 300],
+        default: 160,
+        stickToMarkers: true
+    },
+    reduceHardwareAcceleration: {
+        type: OptionType.BOOLEAN, default: false,
+        description: "Optional: disable hardware acceleration (requires restart and may increase CPU use; usually leave this off for smoother rendering)."
+    },
+    // Hardware acceleration change restart prompt option
+    autoRestartOnHardwareChange: {
+        type: OptionType.BOOLEAN, default: true,
+        description: "Offer to restart Discord so a hardware-acceleration change takes effect"
+    },
+    disableAnimations: {
+        type: OptionType.BOOLEAN, default: true,
+        description: "Disable animations and transitions"
+    },
+    disableGifAutoplay: {
+        type: OptionType.BOOLEAN, default: true,
+        description: "Stop GIFs from autoplaying"
+    },
+    compactMode: {
+        type: OptionType.BOOLEAN, default: true,
+        description: "Use compact message mode"
+    },
+    hideActivities: {
+        type: OptionType.BOOLEAN, default: true,
+        description: "Hide friends' activities (Active Now)"
+    },
+    changeProcessPriority: {
+        type: OptionType.BOOLEAN, default: true,
+        description: "Lower all Discord processes' priority to Below Normal (Windows)"
+    },
+    cleanCacheOnStart: {
+        type: OptionType.BOOLEAN, default: false,
+        description: "Clean Discord's cache when game mode starts"
+    },
+    skipSpringAnimations: {
+        type: OptionType.BOOLEAN, default: true,
+        description: "Skip Discord's spring animations for a snappier UI"
+    },
+    passiveListeners: {
+        type: OptionType.BOOLEAN, default: true,
+        description: "Make scroll and touch listeners passive for smoother scrolling"
+    },
+    lazyImages: {
+        type: OptionType.BOOLEAN, default: true,
+        description: "Lazy-load and async-decode images to reduce jank"
+    },
+    clearStoreCaches: {
+        type: OptionType.BOOLEAN, default: false,
+        description: "Free memory by clearing many Discord caches (messages, emojis, profiles, experiments, and more) when performance mode starts"
+    }
+});

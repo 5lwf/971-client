@@ -1,0 +1,126 @@
+.vc-addon-card {
+    min-height: 148px;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: var(--card-background-default);
+    box-shadow: none;
+    color: var(--interactive-icon-active);
+    border: 1px solid var(--border-subtle);
+    border-radius: 8px;
+    height: 100%;
+    width: 100%;
+    transition: 0.1s ease-out;
+    transition-property: box-shadow, transform, background, opacity;
+    box-sizing: border-box;
+}
+
+.vc-addon-card-disabled {
+    opacity: 0.68;
+}
+
+.vc-addon-card:hover {
+    background-color: var(--background-surface-highest);
+    box-shadow: var(--elevation-low);
+    transform: none;
+    color: var(--text-default);
+}
+
+.vc-addon-header {
+    box-sizing: border-box;
+    padding: 14px 14px 8px;
+    margin: 0;
+    align-items: center;
+    gap: 8px;
+    margin-top: auto;
+    display: flex;
+    width: 100%;
+    justify-content: flex-end;
+    margin-bottom: 0.5em;
+}
+
+.vc-addon-note {
+    height: 2.5em;
+    flex: 0 0 auto;
+    overflow: hidden;
+    margin: 0 14px 12px;
+    line-clamp: 2;
+    color: var(--text-default);
+    text-overflow: ellipsis;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    /* stylelint-disable-next-line property-no-unknown */
+    box-orient: vertical;
+}
+
+.vc-addon-name-author {
+    width: 100%;
+    min-width: 0;
+    flex: 1 1 auto;
+}
+
+.vc-addon-name {
+    display: flex;
+    width: 100%;
+    align-items: center;
+    flex-grow: 1;
+    min-height: 28px;
+}
+
+.vc-addon-author {
+    font-size: 0.8em;
+}
+
+.vc-addon-author::before {
+    content: "by ";
+}
+
+.vc-addon-title-container {
+    width: 100%;
+    overflow: hidden;
+    height: 1.4em;
+    position: relative;
+}
+
+.vc-addon-title {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+@keyframes vc-addon-title {
+    0% {
+        transform: translateX(0);
+    }
+
+    50% {
+        transform: translateX(var(--offset));
+    }
+
+    100% {
+        transform: translateX(0);
+    }
+}
+
+.vc-addon-title:hover {
+    overflow: visible;
+    animation: vc-addon-title var(--duration) linear infinite;
+}
+
+.vc-addon-editable {
+    border: none;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+}
+
+.vc-addon-footer {
+    margin-top: auto;
+    padding: 10px 14px;
+    border-top: 1px solid var(--border-subtle);
+    background-color: color-mix(in srgb, var(--background-base-low) 72%, transparent);
+    font-size: small;
+}

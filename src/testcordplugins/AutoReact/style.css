@@ -1,0 +1,17 @@
+.vc-autoreact-emojiGrid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(36px, 1fr));
+    gap: 2px;
+    height: 240px;
+    padding: 4px;
+    background: var(--background-secondary);
+    border-radius: 8px;
+}
+
+.vc-autoreact-loadMore {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-top: 6px;
+}

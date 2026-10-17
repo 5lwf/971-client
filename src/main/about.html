@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>About 971 Client</title>
+    <style>
+        :root { color-scheme: dark; font-family: Inter, "Segoe UI", system-ui, sans-serif; background: #10131c; color: #f2f4fb; }
+        * { box-sizing: border-box; }
+        body { max-width: 640px; margin: 0 auto; padding: 48px 32px; background: radial-gradient(ellipse at 18% 0%, #222b43 0, transparent 52%), #10131c; min-height: 100vh; }
+        .hero { display: flex; align-items: center; gap: 20px; padding: 24px; border: 1px solid #ffffff14; border-radius: 20px; background: #191e2bc9; box-shadow: 0 18px 50px #0003; }
+        .mark { display: grid; place-items: center; flex: 0 0 68px; width: 68px; height: 68px; border-radius: 19px; background: #111521; color: #43d9c3; font-size: 27px; font-weight: 800; letter-spacing: -2px; box-shadow: inset 0 0 0 1px #ffffff16; }
+        h1 { margin: 0; font-size: 25px; letter-spacing: -.5px; }
+        .version { margin: 8px 0 0; color: #9ba6bd; font-size: 12px; }
+        section { margin-top: 28px; }
+        h2 { margin: 0 0 12px; font-size: 13px; letter-spacing: .09em; text-transform: uppercase; color: #8f9bb4; }
+        .card { padding: 17px 19px; border: 1px solid #ffffff12; border-radius: 14px; background: #181d29; }
+        p { margin: 0; color: #c0c6d4; line-height: 1.65; font-size: 14px; }
+        @media (max-width: 520px) { body { padding: 24px 16px 40px; } .hero { padding: 18px; } }
+        @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition-duration: .01ms !important; } }
+    </style>
+</head>
+<body>
+    <header class="hero">
+        <div class="mark" aria-hidden="true">971</div>
+        <div>
+            <h1>971 Client</h1>
+            <p class="version">Version {{VERSION}}</p>
+        </div>
+    </header>
+    <section>
+        <h2>Credits</h2>
+        <div class="card"><p>Credits to @kk5a - kbk</p></div>
+    </section>
+    <section>
+        <h2>Open-source license</h2>
+        <div class="card"><p>This client includes software licensed under GPL-3.0-or-later. Required license notices and attributions remain in the bundled license files.</p></div>
+    </section>
+</body>
+</html>

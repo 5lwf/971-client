@@ -1,0 +1,59 @@
+.vc-ntrans-modal-content {
+    padding: 1em;
+}
+
+.vc-ntrans-modal-header {
+    place-content: center space-between;
+}
+
+.vc-ntrans-modal-title {
+    margin: 0;
+}
+
+button[class*="closeButton"] {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+button[class*="closeButton"]:hover {
+    background-color: var(--background-modifier-hover);
+}
+
+button[class*="closeButton"]:active {
+    background-color: var(--background-modifier-active);
+}
+
+.vc-ntrans-accessory {
+    color: var(--text-muted);
+    margin-top: 0.5em;
+    font-style: italic;
+    font-weight: 400;
+    line-height: 1.2rem;
+    white-space: break-spaces;
+}
+
+.vc-ntrans-accessory-icon {
+    margin-right: 0.25em;
+}
+
+.vc-ntrans-dismiss {
+    all: unset;
+    cursor: pointer;
+    color: var(--text-link);
+}
+
+.vc-ntrans-dismiss:is(:hover, :focus) {
+    text-decoration: underline;
+}
+
+.vc-ntrans-auto-translate {
+    color: var(--green-360);
+}
+
+.vc-ntrans-chat-button {
+    scale: 1.085;
+}

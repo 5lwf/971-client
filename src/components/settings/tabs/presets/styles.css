@@ -1,0 +1,1156 @@
+/* ── Tab ──────────────────────────────────────────────────────────── */
+
+.vc-presets-toolbar {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 16px;
+}
+
+.vc-presets-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+/* ── Button interactivity (toolbar + row actions + modal footer) ──── */
+
+.vc-presets-toolbar button,
+.vc-presets-row-actions button,
+.vc-presets-modal-actions button,
+.vc-presets-modal-footer button {
+    transition: transform .12s ease, box-shadow .12s ease, filter .12s ease;
+}
+
+.vc-presets-drag-preview button {
+    pointer-events: none;
+}
+
+.vc-presets-toolbar button:hover,
+.vc-presets-row-actions button:hover,
+.vc-presets-modal-actions button:hover,
+.vc-presets-modal-footer button:hover {
+    transform: translateY(-1px);
+    box-shadow: var(--elevation-medium, 0 2px 6px rgb(0 0 0 / 20%));
+    filter: brightness(1.08);
+}
+
+.vc-presets-toolbar button:active,
+.vc-presets-row-actions button:active,
+.vc-presets-modal-actions button:active,
+.vc-presets-modal-footer button:active {
+    transform: translateY(0) scale(.97);
+    box-shadow: none;
+    filter: brightness(.95);
+}
+
+.vc-presets-toolbar button:focus-visible,
+.vc-presets-row-actions button:focus-visible,
+.vc-presets-modal-actions button:focus-visible,
+.vc-presets-modal-footer button:focus-visible {
+    outline: 2px solid var(--brand, var(--brand-experiment, var(--background-brand)));
+    outline-offset: 2px;
+}
+
+/* ── Animations settings section ──────────────────────────────────── */
+
+.vc-presets-anim-section {
+    margin-top: 8px;
+}
+
+.vc-presets-anim-master-row {
+    cursor: default;
+}
+
+.vc-presets-anim-master-button {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    max-width: 80%;
+    padding: 0;
+    border: none;
+    background: transparent;
+    text-align: left;
+    cursor: pointer;
+}
+
+.vc-presets-anim-master-button:focus-visible {
+    outline: 2px solid var(--brand);
+    outline-offset: 2px;
+    border-radius: 4px;
+}
+
+.vc-presets-anim-master-title {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--text-strong);
+    font-size: 16px;
+    font-weight: 500;
+}
+
+.vc-presets-anim-master-description {
+    color: var(--text-subtle);
+    font-size: 14px;
+    line-height: 18px;
+}
+
+.vc-presets-anim-chevron {
+    display: inline-block;
+    transition: transform .2s ease;
+}
+
+.vc-presets-anim-chevron-open {
+    transform: rotate(180deg);
+}
+
+.vc-presets-anim-list {
+    margin-left: 16px;
+    padding-left: 12px;
+    border-left: 2px solid var(--border-subtle);
+
+    /* collapsed by default; expands when -open is present */
+    max-height: 0;
+    opacity: 0;
+    overflow: hidden;
+    transition: max-height .28s ease, opacity .2s ease;
+}
+
+.vc-presets-anim-list-open {
+    /* generous ceiling for 7 rows; transitions smoothly */
+    max-height: 900px;
+    opacity: 1;
+}
+
+.vc-presets-anim-list-disabled {
+    opacity: .45;
+}
+
+.vc-presets-anim-list-open.vc-presets-anim-list-disabled {
+    opacity: .45;
+}
+
+/* ── Duplicate button collapse (animate in AND out) ───────────────── */
+
+.vc-presets-dup-wrap {
+    display: inline-flex;
+    max-width: 200px;
+    opacity: 1;
+    transition: max-width .25s ease, opacity .2s ease, margin .25s ease;
+}
+
+.vc-presets-dup-hidden {
+    max-width: 0;
+    opacity: 0;
+    margin-left: -8px;
+
+    /* swallow the flex gap so siblings close up */
+    pointer-events: none;
+}
+
+/* ── Preset row ───────────────────────────────────────────────────── */
+
+.vc-presets-row {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 14px 16px;
+    border: 1px solid color-mix(in srgb, var(--brand, var(--brand-experiment, var(--background-brand))) 18%, var(--border-subtle));
+    background:
+        linear-gradient(135deg, color-mix(in srgb, var(--brand, var(--brand-experiment, var(--background-brand))) 10%, transparent), transparent 42%),
+        var(--background-base-lower-alt);
+    box-shadow: 0 1px 0 rgb(255 255 255 / 4%) inset, 0 8px 24px rgb(0 0 0 / 10%);
+    overflow: hidden;
+    transition: background-color .15s ease, border-color .15s ease, box-shadow .15s ease, transform .15s ease;
+}
+
+.vc-presets-row::before {
+    /* accent rail that grows in on hover */
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 3px;
+    border-radius: 8px 0 0 8px;
+    background: var(--brand, var(--brand-experiment, var(--background-brand)));
+    opacity: .45;
+    transform: scaleY(.34);
+    transform-origin: center;
+    transition: opacity .18s ease, transform .18s ease;
+}
+
+.vc-presets-row:hover {
+    border-color: color-mix(in srgb, var(--brand, var(--brand-experiment, var(--background-brand))) 38%, var(--border-subtle));
+    box-shadow: var(--elevation-medium), 0 1px 0 rgb(255 255 255 / 6%) inset;
+    transform: translateY(-1px);
+}
+
+.vc-presets-row:hover::before {
+    opacity: 1;
+    transform: scaleY(1);
+}
+
+.vc-presets-row-dragging {
+    opacity: 0;
+    transform: scale(.985);
+}
+
+.vc-presets-row-drop-target {
+    border-color: var(--brand, var(--brand-experiment, var(--background-brand)));
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--brand, var(--brand-experiment, var(--background-brand))) 35%, transparent), var(--elevation-medium);
+    transform: translateY(-2px) scale(1.01);
+}
+
+.vc-presets-row-drop-target::before {
+    opacity: 1;
+    transform: scaleY(1);
+}
+
+.vc-presets-row-drop-before::after,
+.vc-presets-row-drop-after::after {
+    content: "";
+    position: absolute;
+    left: 12px;
+    right: 12px;
+    height: 3px;
+    border-radius: 999px;
+    background: var(--brand, var(--brand-experiment, var(--background-brand)));
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand, var(--brand-experiment, var(--background-brand))) 24%, transparent);
+}
+
+.vc-presets-row-drop-before::after {
+    top: -2px;
+}
+
+.vc-presets-row-drop-after::after {
+    bottom: -2px;
+}
+
+.vc-presets-row-drop-merge {
+    background:
+        linear-gradient(135deg, color-mix(in srgb, var(--brand, var(--brand-experiment, var(--background-brand))) 18%, transparent), transparent 48%),
+        var(--background-base-lower-alt);
+}
+
+.vc-presets-row-drop-merge::after {
+    content: "Drop to merge";
+    position: absolute;
+    right: 14px;
+    bottom: 12px;
+    padding: 4px 8px;
+    border-radius: 999px;
+    color: #fff;
+    background: var(--brand, var(--brand-experiment, var(--background-brand)));
+    font-size: 12px;
+    font-weight: 700;
+    box-shadow: 0 8px 24px rgb(0 0 0 / 24%);
+}
+
+.vc-presets-drag-preview {
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 10000;
+    width: min(360px, calc(100vw - 32px));
+    color: var(--text-default);
+    box-shadow: 0 22px 60px rgb(0 0 0 / 42%), 0 1px 0 rgb(255 255 255 / 8%) inset;
+    opacity: .96;
+    pointer-events: none;
+    animation: vc-presets-drag-preview-lift .14s ease-out;
+}
+
+@keyframes vc-presets-drag-preview-lift {
+    from {
+        opacity: 0;
+        scale: .96;
+    }
+
+    to {
+        opacity: .96;
+        scale: 1;
+    }
+}
+
+.vc-presets-row-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding-right: 40px;
+    min-width: 0;
+}
+
+.vc-presets-row-name {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-default);
+    overflow-wrap: anywhere;
+}
+
+.vc-presets-row-meta {
+    font-size: 12px;
+    color: var(--text-subtle);
+}
+
+.vc-presets-row-badge {
+    margin-left: 8px;
+    color: var(--status-positive, var(--text-positive));
+    font-weight: 600;
+}
+
+.vc-presets-row-badge::before {
+    content: "";
+    display: inline-block;
+    width: 7px;
+    height: 7px;
+    margin-right: 5px;
+    border-radius: 50%;
+    background: currentcolor;
+    animation: vc-presets-pulse 2s ease-in-out infinite;
+}
+
+@keyframes vc-presets-pulse {
+    0%,
+    100% {
+        opacity: 1;
+        transform: scale(1);
+    }
+
+    50% {
+        opacity: .4;
+        transform: scale(.75);
+    }
+}
+
+/* Gear / info button, pinned top-right */
+.vc-presets-row-gear {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--interactive-normal, var(--text-subtle));
+    cursor: pointer;
+    transition: background-color .15s ease, color .15s ease, transform .2s ease;
+}
+
+.vc-presets-row-gear:hover {
+    background: var(--background-mod-subtle, var(--background-base-low));
+    color: var(--interactive-hover, var(--text-default));
+    transform: translateY(-1px);
+}
+
+.vc-presets-row-gear:active {
+    transform: translateY(0) scale(.92);
+}
+
+.vc-presets-row-gear:focus-visible {
+    outline: 2px solid var(--brand);
+    outline-offset: 2px;
+}
+
+.vc-presets-row-gear svg {
+    width: 20px;
+    height: 20px;
+}
+
+.vc-presets-row-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+/* ── Modals (shared) ──────────────────────────────────────────────── */
+
+.vc-presets-modal-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.vc-presets-modal-title {
+    flex: 1;
+    min-width: 0;
+    margin: 0;
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--text-default) !important;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.vc-presets-modal-content {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    color: var(--text-default);
+}
+
+.vc-presets-modal-content code {
+    color: var(--text-default);
+    background: var(--background-base-lowest, var(--background-base-low));
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-family: var(--font-code, monospace);
+}
+
+.vc-presets-modal-footer {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+}
+
+.vc-presets-modal-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+/* ── JSON / textarea box (with hover effect) ──────────────────────── */
+
+.vc-presets-modal-textarea {
+    width: 100%;
+    min-height: 220px;
+    resize: vertical;
+    font-family: var(--font-code, monospace);
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--text-default) !important;
+    background: var(--input-background, var(--background-base-lower-alt)) !important;
+    border: 1px solid var(--border-subtle);
+    border-radius: 8px;
+    padding: 10px 12px;
+    transition: border-color .15s ease, box-shadow .15s ease, background-color .15s ease;
+}
+
+.vc-presets-summary,
+.vc-presets-modal-textarea,
+.vc-presets-modal-textarea textarea,
+.vc-presets-stats {
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in srgb, var(--text-subtle, #888) 55%, transparent) transparent;
+}
+
+.vc-presets-modal-textarea:hover {
+    border-color: var(--border-strong, var(--brand));
+    background: var(--background-base-low) !important;
+}
+
+.vc-presets-modal-textarea:focus-within,
+.vc-presets-modal-textarea:focus {
+    border-color: var(--brand);
+    box-shadow: 0 0 0 2px var(--brand-560, var(--brand)) inset, 0 0 0 1px var(--brand);
+}
+
+/* Discord wraps TextArea/TextInput; force the inner control themed too. */
+.vc-presets-modal-textarea textarea,
+.vc-presets-modal-textarea input,
+.vc-presets-modal-content textarea,
+.vc-presets-modal-content input {
+    color: var(--text-default) !important;
+    background: transparent !important;
+}
+
+.vc-presets-dim {
+    color: var(--text-subtle);
+}
+
+.vc-presets-modal-invalid {
+    color: var(--status-danger, var(--text-danger));
+    font-weight: 500;
+}
+
+.vc-presets-modal-row {
+    align-self: flex-start;
+}
+
+/* ── Merge modal ───────────────────────────────────────────────────── */
+
+.vc-presets-merge-section {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px;
+    border: 1px solid var(--border-subtle);
+    border-radius: 8px;
+    background: var(--background-base-lower-alt);
+    transition: border-color .14s ease, box-shadow .14s ease, transform .14s ease;
+}
+
+.vc-presets-merge-section:hover {
+    border-color: color-mix(in srgb, var(--brand, var(--brand-experiment, var(--background-brand))) 24%, var(--border-subtle));
+    box-shadow: 0 1px 0 rgb(255 255 255 / 4%) inset;
+    transform: translateY(-1px);
+}
+
+.vc-presets-merge-additions {
+    border-color: color-mix(in srgb, var(--status-positive, #23a55a) 28%, var(--border-subtle));
+}
+
+.vc-presets-merge-warning {
+    border-color: color-mix(in srgb, var(--status-warning, #f0b232) 42%, var(--border-subtle));
+    background:
+        linear-gradient(135deg, color-mix(in srgb, var(--status-warning, #f0b232) 12%, transparent), transparent 52%),
+        var(--background-base-lower-alt);
+}
+
+.vc-presets-merge-output,
+.vc-presets-merge-options {
+    background:
+        linear-gradient(135deg, color-mix(in srgb, var(--brand, var(--brand-experiment, var(--background-brand))) 8%, transparent), transparent 48%),
+        var(--background-base-lower-alt);
+}
+
+.vc-presets-merge-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    max-height: 120px;
+    overflow: auto;
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in srgb, var(--text-subtle, #888) 55%, transparent) transparent;
+}
+
+.vc-presets-merge-list::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+.vc-presets-merge-list::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.vc-presets-merge-list::-webkit-scrollbar-thumb {
+    min-height: 28px;
+    border: 2px solid transparent;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--text-subtle, #888) 42%, transparent);
+    background-clip: padding-box;
+}
+
+.vc-presets-merge-list:hover::-webkit-scrollbar-thumb {
+    background: color-mix(in srgb, var(--text-subtle, #888) 75%, transparent);
+    background-clip: padding-box;
+}
+
+.vc-presets-merge-list::-webkit-scrollbar-thumb:hover {
+    background: var(--text-default, #ddd);
+    background-clip: padding-box;
+}
+
+.vc-presets-merge-list::-webkit-scrollbar-thumb:active {
+    background: var(--brand, var(--brand-experiment, var(--background-brand)));
+    background-clip: padding-box;
+}
+
+.vc-presets-merge-list::-webkit-scrollbar-corner {
+    background: transparent;
+}
+
+.vc-presets-merge-chip {
+    padding: 4px 8px;
+    border: 1px solid var(--border-subtle);
+    border-radius: 999px;
+    color: var(--text-default);
+    background: var(--background-base-low);
+    font-size: 12px;
+    transition: border-color .12s ease, background-color .12s ease, transform .12s ease;
+}
+
+.vc-presets-merge-chip:hover {
+    border-color: color-mix(in srgb, var(--brand, var(--brand-experiment, var(--background-brand))) 35%, var(--border-subtle));
+    background: var(--background-base-lower-alt);
+    transform: translateY(-1px);
+}
+
+.vc-presets-merge-conflicts {
+    gap: 10px;
+}
+
+.vc-presets-merge-conflict {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    padding: 10px;
+    border: 1px solid color-mix(in srgb, var(--brand, var(--brand-experiment, var(--background-brand))) 18%, var(--border-subtle));
+    border-radius: 8px;
+    background: var(--background-base-low);
+    transition: border-color .12s ease, box-shadow .12s ease, transform .12s ease;
+}
+
+.vc-presets-merge-conflict:hover,
+.vc-presets-merge-conflict:focus-within {
+    border-color: color-mix(in srgb, var(--brand, var(--brand-experiment, var(--background-brand))) 42%, var(--border-subtle));
+    box-shadow: var(--elevation-low), 0 1px 0 rgb(255 255 255 / 5%) inset;
+    transform: translateY(-1px);
+}
+
+.vc-presets-merge-conflict-text {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.vc-presets-merge-kind {
+    width: fit-content;
+    padding: 2px 6px;
+    border-radius: 999px;
+    color: var(--brand, var(--brand-experiment, var(--background-brand)));
+    background: color-mix(in srgb, var(--brand, var(--brand-experiment, var(--background-brand))) 14%, transparent);
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+}
+
+.vc-presets-merge-dropdown {
+    position: relative;
+    width: 170px;
+    flex: 0 0 170px;
+    align-self: center;
+}
+
+.vc-presets-merge-dropdown-button {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    width: 100%;
+    min-height: 32px;
+    padding: 6px 9px;
+    border: 1px solid color-mix(in srgb, var(--brand, var(--brand-experiment, var(--background-brand))) 18%, var(--border-subtle));
+    border-radius: 8px;
+    color: var(--text-default);
+    background:
+        linear-gradient(135deg, color-mix(in srgb, var(--brand, var(--brand-experiment, var(--background-brand))) 13%, transparent), transparent 56%),
+        var(--background-base-lower-alt);
+    box-shadow: 0 1px 0 rgb(255 255 255 / 5%) inset, 0 6px 16px rgb(0 0 0 / 10%);
+    font: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    text-align: left;
+    cursor: pointer;
+    transition: border-color .14s ease, box-shadow .14s ease, filter .14s ease, transform .14s ease;
+}
+
+.vc-presets-merge-dropdown-button:hover,
+.vc-presets-merge-dropdown-button:focus-visible,
+.vc-presets-merge-dropdown-open .vc-presets-merge-dropdown-button {
+    border-color: color-mix(in srgb, var(--brand, var(--brand-experiment, var(--background-brand))) 44%, var(--border-subtle));
+    box-shadow: var(--elevation-low), 0 1px 0 rgb(255 255 255 / 7%) inset;
+    filter: brightness(1.05);
+    transform: translateY(-1px);
+}
+
+.vc-presets-merge-dropdown-button:focus-visible {
+    outline: 2px solid var(--brand, var(--brand-experiment, var(--background-brand)));
+    outline-offset: 2px;
+}
+
+.vc-presets-merge-dropdown-chevron {
+    color: var(--text-subtle);
+    transition: color .14s ease, transform .18s ease;
+}
+
+.vc-presets-merge-dropdown-open .vc-presets-merge-dropdown-chevron {
+    color: var(--text-default);
+    transform: rotate(180deg);
+}
+
+.vc-presets-merge-dropdown-menu {
+    position: absolute;
+    z-index: 10;
+    top: calc(100% + 6px);
+    right: 0;
+    left: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 5px;
+    border: 1px solid color-mix(in srgb, var(--brand, var(--brand-experiment, var(--background-brand))) 26%, var(--border-subtle));
+    border-radius: 10px;
+    background: var(--background-base-low);
+    box-shadow: var(--elevation-high, 0 12px 32px rgb(0 0 0 / 35%));
+    transform-origin: top center;
+    animation: vc-presets-dropdown-in .14s ease;
+}
+
+.vc-presets-merge-dropdown-option {
+    padding: 7px 8px;
+    border: 1px solid transparent;
+    border-radius: 7px;
+    color: var(--text-default);
+    background: transparent;
+    font: inherit;
+    font-size: 12px;
+    text-align: left;
+    cursor: pointer;
+    transition: background-color .12s ease, border-color .12s ease, color .12s ease, transform .12s ease;
+}
+
+.vc-presets-merge-dropdown-option:hover,
+.vc-presets-merge-dropdown-option:focus-visible {
+    border-color: color-mix(in srgb, var(--brand, var(--brand-experiment, var(--background-brand))) 28%, transparent);
+    color: var(--text-default);
+    background: color-mix(in srgb, var(--brand, var(--brand-experiment, var(--background-brand))) 14%, var(--background-base-low));
+    outline: none;
+    transform: translateX(2px);
+}
+
+.vc-presets-merge-dropdown-option-selected {
+    border-color: color-mix(in srgb, var(--brand, var(--brand-experiment, var(--background-brand))) 36%, transparent);
+    color: var(--text-default);
+    background: color-mix(in srgb, var(--brand, var(--brand-experiment, var(--background-brand))) 22%, var(--background-base-low));
+}
+
+.vc-presets-merge-clean {
+    padding: 12px;
+    border: 1px solid color-mix(in srgb, var(--status-positive, #23a55a) 32%, var(--border-subtle));
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--status-positive, #23a55a) 10%, transparent);
+}
+
+.vc-presets-merge-footer {
+    display: block;
+}
+
+.vc-presets-merge-footer-inner {
+    display: flex;
+    justify-content: space-between;
+    width: 100%;
+}
+
+/* ── Import preview ───────────────────────────────────────────────── */
+
+.vc-presets-preview {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 12px 14px;
+    border-radius: 8px;
+    background: var(--background-base-lower-alt);
+    border: 1px solid var(--border-subtle);
+    animation: vc-presets-fade-in .2s ease;
+}
+
+/* ── Info modal: tabs ─────────────────────────────────────────────── */
+
+.vc-presets-tabs {
+    display: flex;
+    gap: 4px;
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+.vc-presets-tab {
+    position: relative;
+    padding: 8px 14px;
+    border: none;
+    background: transparent;
+    color: var(--text-subtle) !important;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: color .15s ease;
+}
+
+.vc-presets-tab:hover {
+    color: var(--text-default) !important;
+}
+
+.vc-presets-tab::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: -1px;
+    height: 2px;
+    background: var(--brand, var(--brand-experiment, var(--background-brand)));
+    transform: scaleX(0);
+    transition: transform .2s ease;
+}
+
+.vc-presets-tab-active {
+    color: var(--text-default) !important;
+}
+
+.vc-presets-tab-active::after {
+    transform: scaleX(1);
+}
+
+.vc-presets-tab:focus-visible {
+    outline: 2px solid var(--brand);
+    outline-offset: -2px;
+    border-radius: 4px;
+}
+
+/* ── Info modal: dev info tab ─────────────────────────────────────── */
+
+.vc-presets-stats {
+    display: grid;
+    padding-top: 1px;
+    grid-template-columns: 1fr;
+    gap: 8px;
+    background: transparent;
+    border: none;
+    border-radius: 8px;
+    overflow: hidden;
+    animation: vc-presets-fade-in .2s ease;
+}
+
+.vc-presets-stat {
+    position: relative;
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 9px 14px;
+    border: 1px solid color-mix(in srgb, var(--brand, var(--brand-experiment, var(--background-brand))) 14%, var(--border-subtle));
+    border-radius: 8px;
+    background: var(--background-base-lower-alt);
+    cursor: pointer;
+    overflow: hidden;
+    box-shadow: 0 1px 0 rgb(255 255 255 / 3%) inset;
+    transition: background-color .12s ease, border-color .12s ease, box-shadow .12s ease, transform .12s ease;
+}
+
+.vc-presets-stat::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 3px;
+    border-radius: 8px 0 0 8px;
+    background: var(--brand, var(--brand-experiment, var(--background-brand)));
+    opacity: .35;
+    transform: scaleY(.35);
+    transform-origin: center;
+    transition: opacity .16s ease, transform .16s ease;
+}
+
+.vc-presets-stat:hover {
+    background: var(--background-base-low);
+    border-color: color-mix(in srgb, var(--brand, var(--brand-experiment, var(--background-brand))) 32%, var(--border-subtle));
+    box-shadow: var(--elevation-low), 0 1px 0 rgb(255 255 255 / 5%) inset;
+    transform: translateY(-1px);
+}
+
+.vc-presets-stat:hover::before {
+    opacity: 1;
+    transform: scaleY(1);
+}
+
+.vc-presets-stat:active {
+    box-shadow: none;
+    transform: translateY(0) scale(.99);
+}
+
+.vc-presets-stat:focus-visible {
+    outline: 2px solid var(--brand);
+    outline-offset: -2px;
+}
+
+.vc-presets-stat-label {
+    flex-shrink: 0;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color: var(--text-subtle) !important;
+}
+
+.vc-presets-stat-value {
+    min-width: 0;
+    text-align: right;
+    color: var(--text-default) !important;
+    overflow-wrap: anywhere;
+}
+
+.vc-presets-stat-mono {
+    font-family: var(--font-code, monospace);
+    font-size: 13px;
+}
+
+/* ── Info modal: settings tab ─────────────────────────────────────── */
+
+.vc-presets-settings {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    animation: vc-presets-fade-in .2s ease;
+}
+
+.vc-presets-setting-row {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 10px 0;
+}
+
+.vc-presets-setting-text {
+    flex: 1;
+    min-width: 0;
+}
+
+.vc-presets-setting-text h5 {
+    color: var(--text-default) !important;
+}
+
+/* ── Info modal: contents tab ─────────────────────────────────────── */
+
+.vc-presets-summary {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-height: 320px;
+    overflow-y: auto;
+    animation: vc-presets-fade-in .2s ease;
+}
+
+.vc-presets-summary-plugin {
+    padding: 6px 0;
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+.vc-presets-summary-name {
+    font-weight: 600;
+    color: var(--text-default) !important;
+}
+
+.vc-presets-summary-settings {
+    margin-top: 4px;
+    margin-left: 12px;
+    font-size: 12px;
+    color: var(--text-subtle);
+    font-family: var(--font-code, monospace);
+    word-break: break-all;
+}
+
+.vc-presets-summary-key {
+    color: var(--text-default);
+}
+
+.vc-presets-summary::-webkit-scrollbar,
+.vc-presets-modal-textarea::-webkit-scrollbar,
+.vc-presets-modal-textarea textarea::-webkit-scrollbar,
+.vc-presets-stats::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+/* Transparent track — overlay-style, no boxed rail. */
+.vc-presets-summary::-webkit-scrollbar-track,
+.vc-presets-modal-textarea::-webkit-scrollbar-track,
+.vc-presets-modal-textarea textarea::-webkit-scrollbar-track,
+.vc-presets-stats::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+/* Thumb: nearly invisible at rest, 2px inset so it floats and reads slim. */
+.vc-presets-summary::-webkit-scrollbar-thumb,
+.vc-presets-modal-textarea::-webkit-scrollbar-thumb,
+.vc-presets-modal-textarea textarea::-webkit-scrollbar-thumb,
+.vc-presets-stats::-webkit-scrollbar-thumb {
+    background: color-mix(in srgb, var(--text-subtle, #888) 40%, transparent);
+    border-radius: 999px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+    min-height: 28px;
+    transition: background-color .15s ease;
+}
+
+/* Fade the thumb up when the container is hovered/scrolled. */
+.vc-presets-summary:hover::-webkit-scrollbar-thumb,
+.vc-presets-modal-textarea:hover::-webkit-scrollbar-thumb,
+.vc-presets-stats:hover::-webkit-scrollbar-thumb {
+    background: color-mix(in srgb, var(--text-subtle, #888) 75%, transparent);
+    background-clip: padding-box;
+}
+
+/* Solid when grabbing the thumb directly. */
+.vc-presets-summary::-webkit-scrollbar-thumb:hover,
+.vc-presets-modal-textarea::-webkit-scrollbar-thumb:hover,
+.vc-presets-modal-textarea textarea::-webkit-scrollbar-thumb:hover,
+.vc-presets-stats::-webkit-scrollbar-thumb:hover {
+    background: var(--text-default, #ddd);
+    background-clip: padding-box;
+}
+
+.vc-presets-summary::-webkit-scrollbar-thumb:active,
+.vc-presets-modal-textarea::-webkit-scrollbar-thumb:active,
+.vc-presets-modal-textarea textarea::-webkit-scrollbar-thumb:active,
+.vc-presets-stats::-webkit-scrollbar-thumb:active {
+    background: var(--brand, var(--brand-experiment, var(--background-brand)));
+    background-clip: padding-box;
+}
+
+.vc-presets-summary::-webkit-scrollbar-corner,
+.vc-presets-modal-textarea::-webkit-scrollbar-corner,
+.vc-presets-modal-textarea textarea::-webkit-scrollbar-corner,
+.vc-presets-stats::-webkit-scrollbar-corner {
+    background: transparent;
+}
+
+/* ── Motion ───────────────────────────────────────────────────────── */
+
+@keyframes vc-presets-fade-in {
+    from {
+        opacity: 0;
+        transform: translateY(4px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes vc-presets-dropdown-in {
+    from {
+        opacity: 0;
+        transform: translateY(-4px) scale(.98);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .vc-presets-row,
+    .vc-presets-row::before,
+    .vc-presets-row-gear,
+    .vc-presets-tab::after,
+    .vc-presets-row-badge::before,
+    .vc-presets-preview,
+    .vc-presets-stats,
+    .vc-presets-settings,
+    .vc-presets-summary,
+    .vc-presets-json,
+    .vc-presets-toolbar button,
+    .vc-presets-row-actions button,
+    .vc-presets-modal-actions button,
+    .vc-presets-modal-textarea {
+        animation: none !important;
+        transition: none !important;
+    }
+
+    .vc-presets-row:hover,
+    .vc-presets-row-gear:hover,
+    .vc-presets-toolbar button:hover,
+    .vc-presets-row-actions button:hover,
+    .vc-presets-modal-actions button:hover {
+        transform: none;
+    }
+}
+
+/* ── Per-animation kill switches (body classes set from JS) ───────── */
+
+/* Master: kill every transition/animation under the tab and modals. */
+body.vc-presets-noanim-all [class*="vc-presets-"] {
+    animation: none !important;
+    transition: none !important;
+}
+
+body.vc-presets-noanim-all .vc-presets-row::before,
+body.vc-presets-noanim-all .vc-presets-tab::after {
+    transition: none !important;
+}
+
+/* Row hover rail + lift */
+body.vc-presets-noanim-rowHover .vc-presets-row,
+body.vc-presets-noanim-rowHover .vc-presets-row::before {
+    transition: none !important;
+}
+
+body.vc-presets-noanim-rowHover .vc-presets-row:hover {
+    transform: none;
+}
+
+body.vc-presets-noanim-rowHover .vc-presets-row:hover::before {
+    transform: scaleY(0);
+}
+
+/* Tab underline slide */
+body.vc-presets-noanim-tabUnderline .vc-presets-tab::after {
+    transition: none !important;
+}
+
+/* ── Info modal: json tab ─────────────────────────────────────────── */
+
+.vc-presets-json {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    animation: vc-presets-fade-in .2s ease;
+}
+
+/* ── Scrollbars (themed, slim, floating) ──────────────────────────── */
+
+/* Live badge pulse */
+body.vc-presets-noanim-badgePulse .vc-presets-row-badge::before {
+    animation: none !important;
+}
+
+/* Panel & row fade-ins + duplicate collapse */
+body.vc-presets-noanim-fadeIn .vc-presets-preview,
+body.vc-presets-noanim-fadeIn .vc-presets-stats,
+body.vc-presets-noanim-fadeIn .vc-presets-settings,
+body.vc-presets-noanim-fadeIn .vc-presets-summary,
+body.vc-presets-noanim-fadeIn .vc-presets-json {
+    animation: none !important;
+}
+
+body.vc-presets-noanim-fadeIn .vc-presets-dup-wrap {
+    transition: none !important;
+}
+
+/* Button hover & press */
+body.vc-presets-noanim-buttons .vc-presets-toolbar button,
+body.vc-presets-noanim-buttons .vc-presets-row-actions button,
+body.vc-presets-noanim-buttons .vc-presets-modal-actions button,
+body.vc-presets-noanim-buttons .vc-presets-modal-footer button {
+    transition: none !important;
+}
+
+body.vc-presets-noanim-buttons .vc-presets-toolbar button:hover,
+body.vc-presets-noanim-buttons .vc-presets-row-actions button:hover,
+body.vc-presets-noanim-buttons .vc-presets-modal-actions button:hover,
+body.vc-presets-noanim-buttons .vc-presets-modal-footer button:hover {
+    transform: none;
+    box-shadow: none;
+    filter: none;
+}
+
+/* Gear icon spin */
+body.vc-presets-noanim-gear .vc-presets-row-gear {
+    transition: background-color .15s ease, color .15s ease;
+}
+
+body.vc-presets-noanim-gear .vc-presets-row-gear:hover {
+    transform: none;
+}
+
+/* JSON box hover */
+body.vc-presets-noanim-jsonHover .vc-presets-modal-textarea {
+    transition: none !important;
+}
+
+body.vc-presets-noanim-jsonHover .vc-presets-modal-textarea:hover {
+    border-color: var(--border-subtle);
+    background: var(--input-background, var(--background-base-lower-alt)) !important;
+}

@@ -1,0 +1,40 @@
+.vc-betterFolders-sidebar {
+    grid-area: betterFoldersSidebar;
+    margin-top: 0 !important;
+    padding-top: 0 !important;
+}
+
+.vc-betterFolders-sidebar,
+.vc-betterFolders-sidebar > div,
+.vc-betterFolders-sidebar nav,
+.vc-betterFolders-sidebar ul,
+.vc-betterFolders-sidebar [class*="guilds"],
+.vc-betterFolders-sidebar [class*="tree"],
+.vc-betterFolders-sidebar [class*="scroller"],
+.vc-betterFolders-sidebar [class*="unreadMentionsIndicator"] {
+    margin-top: 0 !important;
+    padding-top: 0 !important;
+}
+
+.vc-betterFolders-nested-parent-list {
+    height: auto !important;
+    padding-bottom: 6px !important;
+}
+
+/* These area names need to be hardcoded. Only betterFoldersSidebar is added by the plugin. */
+.vc-betterFolders-sidebar-grid {
+    /* stylelint-disable-next-line value-keyword-case */
+    grid-template-columns: [start] min-content [guildsEnd] min-content [sidebarEnd] min-content [channelsEnd] 1fr [end];
+    grid-template-areas:
+        "titleBar titleBar titleBar titleBar"
+        "guildsList betterFoldersSidebar notice notice"
+        "guildsList betterFoldersSidebar channelsList page";
+}
+
+.vc-betterFolders-sidebar div:empty:not([data-dnd-name]),
+.vc-betterFolders-sidebar div[style*="display: none"] {
+    display: none !important;
+    height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+}

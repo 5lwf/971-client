@@ -1,0 +1,202 @@
+/*
+ * Vencord, a Discord client mod
+ * Copyright (c) 2024 Vendicated and contributors
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
+import { DataStore } from "@api/index";
+import { Guild, User } from "@vencord/discord-types";
+import { ChannelStore, GuildMemberStore, GuildStore, MessageStore, UserStore, } from "@webpack/common";
+
+export interface IUserExtra {
+    isOwner?: boolean;
+    updatedAt?: number;
+}
+
+export interface IStorageUser {
+    id: string;
+    username: string,
+    tag: string,
+    iconURL?: string;
+    extra?: IUserExtra;
+}
+
+export interface GroupData {
+    id: string;
+    users: { [key: string]: IStorageUser; };
+    name: string;
+    inviteLink?: string;
+}
+
+const MAX_USERS_PER_GROUP = 500;
+const MAX_GROUPS = 100;
+const MAX_TOTAL_USERS = 5000;
+
+export class Data {
+    declare usersCollection: Record<string, GroupData>;
+    declare _storageAutoSaveProtocol_interval;
+    declare _onMessagePreSend_preSend;
+
+    withStart() {
+        return this;
+    }
+
+    onMessagePreSend(channelId, message, extra) {
+        const target: Set<{ user: User; source?: Guild, extra: IUserExtra; }> = new Set();
+        const now = Date.now();
+        const { replyOptions } = extra;
+
+        const guild = (() => {
+            const channel = ChannelStore.getChannel(channelId);
+            return GuildStore.getGuild(channel.guild_id) || undefined;
+        })();
+
+        if (replyOptions?.messageReference) {
+            const { channel_id, message_id } = replyOptions.messageReference;
+            const message = MessageStore.getMessage(channel_id, message_id);
+            if (!message) {
+                return;
+            }
+            const { author } = message;
+
+            target.add({ user: author, source: guild, extra: { updatedAt: now } });
+        }
+
+        if (message.content) {
+            const { content } = message;
+            const ids = [...content.matchAll(/<@!?(?<id>\d{17,23})>/g)].map(
+                ({ groups }) => groups.id
+            );
+
+            const users = ids
+                .map(id => UserStore.getUser(id))
+                .filter(Boolean);
+            for (const user of users) {
+                target.add({ user, source: guild, extra: { updatedAt: now } });
+            }
+        }
+
+        this.processUsersToCollection([...target]);
+    }
+
+    async processUsersToCollection(
+        array: { user: User; source?: Guild; extra?: IUserExtra; }[]
+    ) {
+        const target = this.usersCollection;
+        const processedGuilds = new Set<string>();
+
+        // enforce group cap
+        if (Object.keys(target).length > MAX_GROUPS) {
+            const keys = Object.keys(target);
+            for (let i = 0; i < keys.length - MAX_GROUPS; i++) delete target[keys[i]];
+        }
+
+        for (const { user, source, extra } of array) {
+            if (!user || user.bot) {
+                continue;
+            }
+
+            const groupKey = source?.id ?? "dm";
+            let group = target[groupKey];
+            if (!group) {
+                if (Object.keys(target).length >= MAX_GROUPS) continue;
+                group = (target[groupKey] = {
+                    name: source?.name || "dm",
+                    id: source?.id ?? "dm",
+                    users: {},
+                    inviteLink: undefined
+                });
+            }
+            const usersField = group.users;
+            if (!usersField[user.id] && Object.keys(usersField).length >= MAX_USERS_PER_GROUP) {
+                // LRU: evict oldest (first key)
+                const oldest = Object.keys(usersField)[0];
+                if (oldest) delete usersField[oldest];
+            }
+            // global cap check
+            let total = 0;
+            for (const g of Object.values(target)) total += Object.keys(g.users).length;
+            if (total >= MAX_TOTAL_USERS && !usersField[user.id]) continue;
+
+            const previouExtra = usersField[user.id]?.extra ?? {};
+            const { id, username } = user;
+
+            usersField[id] = {
+                id,
+                username,
+                tag: user.discriminator === "0" ? user.username : user.tag,
+                extra: { ...previouExtra, ...extra },
+                iconURL: user.getAvatarURL(),
+            };
+            if (source && !processedGuilds.has(source.id)) {
+                processedGuilds.add(source.id);
+            }
+        }
+    }
+
+    async updateStorage() {
+        await DataStore.set("irememberyou.data", this.usersCollection);
+    }
+
+    async initializeUsersCollection() {
+        const data = await DataStore.get("irememberyou.data");
+        this.usersCollection = data ?? {};
+    }
+
+    writeMembersFromUserGuildsToCollection() {
+        const now = Date.now();
+        const LIMIT = 1_000;
+
+        const clientId = UserStore.getCurrentUser()?.id;
+        if (!clientId) {
+            return;
+        }
+        for (const guild of Object.values(GuildStore.getGuilds())) {
+            const { ownerId } = guild;
+            if (ownerId !== clientId) {
+                continue;
+            }
+
+            const guildTarget: Set<{ user: User; source?: Guild; extra: IUserExtra; }> = new Set();
+            const members = GuildMemberStore.getMembers(guild.id);
+            const slice = members.slice(0, LIMIT);
+            for (const member of slice) {
+                const user = UserStore.getUser(member.userId);
+                if (user) {
+                    guildTarget.add({ user, source: guild, extra: { updatedAt: now } });
+                }
+            }
+
+            this.processUsersToCollection([...guildTarget]);
+        }
+    }
+
+    writeGuildsOwnersToCollection() {
+        const target: Set<{ user: User; source?: Guild; extra: IUserExtra; }> =
+            new Set();
+        const now = Date.now();
+
+        for (const guild of Object.values(GuildStore.getGuilds())) {
+            const { ownerId } = guild;
+            const owner = UserStore.getUser(ownerId);
+            if (!owner) {
+                continue;
+            }
+            target.add({
+                user: owner,
+                source: guild,
+                extra: { isOwner: true, updatedAt: now },
+            });
+        }
+
+        this.processUsersToCollection([...target]);
+    }
+
+    storageAutoSaveProtocol() {
+        // 5min instead of 3min to reduce GC pressure from JSON.stringify of large collection
+        this._storageAutoSaveProtocol_interval = setInterval(
+            this.updateStorage.bind(this),
+            60_000 * 5
+        );
+    }
+}

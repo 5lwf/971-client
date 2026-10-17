@@ -1,0 +1,628 @@
+/*
+ * Vencord, a Discord client mod
+ * Copyright (c) 2026 Vendicated and contributors
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
+export interface TmMessage {
+    id: string;
+    from: { address: string; name: string; };
+    subject: string;
+    intro: string;
+    createdAt: string;
+    seen: boolean;
+    html?: string[];
+    text?: string;
+}
+
+export interface TmMessageFull extends TmMessage {
+    html: string[];
+    text: string;
+}
+
+export interface TmDomain {
+    id: string;
+    domain: string;
+    isActive: boolean;
+}
+
+export interface SavedAccount {
+    id: string;
+    providerId: string;
+    address: string;
+    token?: string;
+    password?: string;
+    login?: string;
+    domain?: string;
+    sidToken?: string;
+    seq?: number;
+    createdAt: number;
+}
+
+export interface TempProvider {
+    id: string;
+    name: string;
+    description: string;
+    accent: string;
+    getDomains(): Promise<string[]>;
+    createAccount(address: string, password: string): Promise<SavedAccount>;
+    getMessages(account: SavedAccount): Promise<TmMessage[]>;
+    getMessage(account: SavedAccount, id: string): Promise<TmMessageFull>;
+    deleteMessage(account: SavedAccount, id: string): Promise<void>;
+    deleteAccount(account: SavedAccount): Promise<void>;
+}
+
+function randomString(len = 10): string {
+    const chars = "abcdefghijklmnopqrstuvwxyz0123456789";
+    return Array.from({ length: len }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
+}
+export { randomString };
+
+function mapGuerrillaDate(ts: string | number): string {
+    if (typeof ts === "number") return new Date(ts * 1000).toISOString();
+    return new Date(ts).toISOString();
+}
+
+async function doFetch(url: string, init?: RequestInit): Promise<Response> {
+    try {
+        const Native: any = (globalThis as any).VencordNative?.pluginHelpers?.TempMail;
+        if (Native?.fetchTempMail) {
+            const opts: any = {};
+            if (init?.method) opts.method = init.method;
+            if (init?.headers) opts.headers = init.headers as Record<string, string>;
+            if (init?.body) opts.body = typeof init.body === "string" ? init.body : String(init.body);
+            const res: any = await Native.fetchTempMail(url, opts);
+            return {
+                ok: res.ok,
+                status: res.status,
+                statusText: res.statusText,
+                headers: new Headers(res.headers ?? {}),
+                json: async () => res.json ?? (res.text ? JSON.parse(res.text) : undefined),
+                text: async () => res.text ?? "",
+            } as unknown as Response;
+        }
+    } catch {}
+    return doFetch(url, init);
+}
+
+const MAILTM_FALLBACK: Record<string, string[]> = {
+    "mail.tm": ["fexbox.org", "fexpost.com", "fexbox.rs", "mail.tm"],
+    "mail.gw": ["0box.eu", "mail.gw", "s0ny.flu.cc", "tmail.ws"],
+};
+
+function createMailTmProvider(base: string, id: string, name: string, accent: string): TempProvider {
+    return {
+        id, name, accent,
+        description: `Powered by ${base.replace("https://", "")}`,
+
+        async getDomains() {
+            try {
+                const r = await doFetch(`${base}/domains?page=1`, { headers: { Accept: "application/json" } });
+                if (!r.ok) throw new Error(`${name} domains failed ${r.status}`);
+                const data = await r.json();
+                const list: TmDomain[] = data["hydra:member"] ?? data.member ?? data["hydra:member"] ?? [];
+                const domains = list.filter(x => x.isActive !== false).map(x => x.domain).filter(Boolean);
+                if (domains.length) return domains;
+                throw new Error("empty");
+            } catch (e) {
+                return MAILTM_FALLBACK[id] ?? ["mail.tm"];
+            }
+        },
+
+        async createAccount(address: string, password: string) {
+            let r: Response;
+            try {
+                r = await doFetch(`${base}/accounts`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json", Accept: "application/json" },
+                    body: JSON.stringify({ address, password }),
+                });
+            } catch (e: any) {
+                if (id === "mail.gw") throw new Error("Mail.gw is temporarily offline — please use Mail.tm");
+                throw new Error(`${name} network failed: ${e?.message ?? String(e)}`);
+            }
+            if (!r.ok) {
+                const txt = await r.text().catch(() => "");
+                if (id === "mail.gw" && r.status === 502) throw new Error("Mail.gw is currently offline (502) — please use Mail.tm for now");
+                throw new Error(`${name} create failed ${r.status} ${txt.slice(0, 120)}`);
+            }
+            const data = await r.json();
+            const tokenRes = await doFetch(`${base}/token`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ address, password }),
+            });
+            if (!tokenRes.ok) throw new Error(`${name} token failed ${tokenRes.status}`);
+            const tdata = await tokenRes.json();
+            return {
+                id: data.id ?? address,
+                providerId: id,
+                address,
+                token: tdata.token,
+                password,
+                createdAt: Date.now(),
+            };
+        },
+
+        async getMessages(account) {
+            if (!account.token) return [];
+            try {
+                const r = await doFetch(`${base}/messages?page=1`, {
+                    headers: { Authorization: `Bearer ${account.token}`, Accept: "application/json" }
+                });
+                if (!r.ok) {
+                    if (r.status === 401 || r.status === 403) throw new Error(`Auth failed ${r.status}`);
+                    return [];
+                }
+                const data = await r.json();
+                const list: TmMessage[] = data["hydra:member"] ?? data.member ?? [];
+                return list.map(m => ({
+                    ...m,
+                    seen: m.seen ?? false,
+                }));
+            } catch (e: any) {
+                if (String(e?.message).includes("Auth failed")) throw e;
+                return [];
+            }
+        },
+
+        async getMessage(account, mid) {
+            if (!account.token) throw new Error("No token");
+            const r = await doFetch(`${base}/messages/${mid}`, {
+                headers: { Authorization: `Bearer ${account.token}` }
+            });
+            if (!r.ok) throw new Error(`Fetch message ${r.status}`);
+            const data = await r.json();
+            return {
+                ...data,
+                html: data.html ?? [],
+                text: data.text ?? "",
+            };
+        },
+
+        async deleteMessage(account, mid) {
+            if (!account.token) return;
+            await doFetch(`${base}/messages/${mid}`, {
+                method: "DELETE",
+                headers: { Authorization: `Bearer ${account.token}` }
+            });
+        },
+
+        async deleteAccount(account) {
+            if (!account.token) return;
+            await doFetch(`${base}/accounts/${account.id}`, {
+                method: "DELETE",
+                headers: { Authorization: `Bearer ${account.token}` }
+            });
+        }
+    };
+}
+
+const OneSecMailProvider: TempProvider = {
+    id: "1secmail",
+    name: "1SecMail",
+    description: "API: 1secmail.com — instant, no password",
+    accent: "#23a55a",
+
+    async getDomains() {
+        try {
+            const r = await doFetch("https://www.1secmail.com/api/v1/?action=getDomainList", { headers: { Accept: "application/json" } });
+            if (!r.ok) throw new Error(`${r.status}`);
+            const data: string[] = await r.json();
+            if (Array.isArray(data) && data.length) return data;
+            throw new Error("empty");
+        } catch {
+            return ["1secmail.com", "1secmail.org", "1secmail.net", "wwjmp.com", "esiix.com", "yoggm.com"];
+        }
+    },
+
+    async createAccount(address: string) {
+        const at = address.indexOf("@");
+        const login = at >= 0 ? address.slice(0, at) : address;
+        const domain = at >= 0 ? address.slice(at + 1) : (await this.getDomains())[0];
+        return {
+            id: `${login}@${domain}`,
+            providerId: this.id,
+            address: `${login}@${domain}`,
+            login,
+            domain,
+            createdAt: Date.now(),
+        };
+    },
+
+    async getMessages(account) {
+        if (!account.login || !account.domain) return [];
+        try {
+            const url = `https://www.1secmail.com/api/v1/?action=getMessages&login=${encodeURIComponent(account.login)}&domain=${encodeURIComponent(account.domain)}`;
+            const r = await doFetch(url, { headers: { Accept: "application/json" } });
+            if (!r.ok) return [];
+            const list: any[] = await r.json();
+            if (!Array.isArray(list)) return [];
+            return list.map(m => ({
+                id: String(m.id),
+                from: { address: m.from ?? "", name: "" },
+                subject: m.subject ?? "",
+                intro: (m.body ?? "").slice(0, 120),
+                createdAt: new Date(m.date).toISOString(),
+                seen: false,
+                html: [],
+                text: m.body ?? "",
+            }));
+        } catch { return []; }
+    },
+
+    async getMessage(account, mid) {
+        if (!account.login || !account.domain) throw new Error("Missing login");
+        const url = `https://www.1secmail.com/api/v1/?action=readMessage&login=${encodeURIComponent(account.login)}&domain=${encodeURIComponent(account.domain)}&id=${encodeURIComponent(mid)}`;
+        const r = await doFetch(url);
+        if (!r.ok) throw new Error(`1SecMail read ${r.status}`);
+        const m: any = await r.json();
+        const html = m.htmlBody ? [m.htmlBody] : [];
+        const text = m.textBody ?? m.body ?? "";
+        return {
+            id: String(m.id ?? mid),
+            from: { address: m.from ?? "", name: "" },
+            subject: m.subject ?? "",
+            intro: text.slice(0, 120),
+            createdAt: new Date(m.date).toISOString(),
+            seen: false,
+            html,
+            text,
+        };
+    },
+
+    async deleteMessage() {},
+    async deleteAccount() {},
+};
+
+const GuerrillaProvider: TempProvider = {
+    id: "guerrillamail",
+    name: "Guerrilla Mail",
+    description: "API: guerrillamail.com — classic disposable",
+    accent: "#f59e0b",
+
+    async getDomains() {
+        return ["guerrillamail.com", "guerrillamail.org", "guerrillamail.net", "sharklasers.com", "pokemail.net"];
+    },
+
+    async createAccount(address: string) {
+        const user = address.split("@")[0] || randomString(10);
+        const sidRes = await doFetch("https://api.guerrillamail.com/ajax.php?f=get_email_address&ip=127.0.0.1&agent=Mozilla_5.0&lang=en");
+        const sidData: any = await sidRes.json().catch(() => ({}));
+        const sidToken: string = sidData.sid_token ?? randomString(20);
+        const fallbackEmail: string = sidData.email_addr ?? `${user}@guerrillamail.com`;
+
+        if (user && user !== randomString(10)) {
+            try {
+                const setRes = await doFetch(`https://api.guerrillamail.com/ajax.php?f=set_email_user&email_user=${encodeURIComponent(user)}&lang=en&sid_token=${encodeURIComponent(sidToken)}&site=guerrillamail.com`);
+                const setData: any = await setRes.json().catch(() => ({}));
+                if (setData.email_addr) {
+                    return {
+                        id: setData.email_addr,
+                        providerId: this.id,
+                        address: setData.email_addr,
+                        sidToken: sidToken,
+                        login: user,
+                        domain: setData.email_addr.split("@")[1],
+                        createdAt: Date.now(),
+                    };
+                }
+            } catch { }
+        }
+
+        const domain = fallbackEmail.split("@")[1] ?? "guerrillamail.com";
+        const login = fallbackEmail.split("@")[0];
+        return {
+            id: fallbackEmail,
+            providerId: this.id,
+            address: fallbackEmail,
+            sidToken,
+            login,
+            domain,
+            createdAt: Date.now(),
+        };
+    },
+
+    async getMessages(account) {
+        if (!account.sidToken) return [];
+        try {
+            const url = `https://api.guerrillamail.com/ajax.php?f=check_email&seq=${account.seq ?? 0}&sid_token=${encodeURIComponent(account.sidToken)}&site=guerrillamail.com`;
+            const r = await doFetch(url, { headers: { Accept: "application/json" } });
+            if (!r.ok) return [];
+            const data: any = await r.json();
+            const list: any[] = data.list ?? [];
+            return list.map(m => ({
+                id: String(m.mail_id),
+                from: { address: m.mail_from ?? "", name: "" },
+                subject: m.mail_subject ?? "",
+                intro: (m.mail_excerpt ?? m.mail_body ?? "").slice(0, 120).replace(/<[^>]+>/g, " "),
+                createdAt: mapGuerrillaDate(m.mail_date ?? m.mail_timestamp ?? Date.now()),
+                seen: m.mail_read === "1",
+                html: [],
+                text: m.mail_body ?? "",
+            }));
+        } catch { return []; }
+    },
+
+    async getMessage(account, mid) {
+        if (!account.sidToken) throw new Error("No session");
+        const url = `https://api.guerrillamail.com/ajax.php?f=fetch_email&email_id=${encodeURIComponent(mid)}&sid_token=${encodeURIComponent(account.sidToken)}&site=guerrillamail.com`;
+        const r = await doFetch(url);
+        if (!r.ok) throw new Error(`Guerrilla fetch ${r.status}`);
+        const m: any = await r.json();
+        return {
+            id: String(m.mail_id ?? mid),
+            from: { address: m.mail_from ?? "", name: "" },
+            subject: m.mail_subject ?? "",
+            intro: (m.mail_excerpt ?? "").slice(0, 120),
+            createdAt: mapGuerrillaDate(m.mail_timestamp ?? Date.now()),
+            seen: true,
+            html: m.mail_body ? [m.mail_body] : [],
+            text: (m.mail_body ?? "").replace(/<[^>]+>/g, " ").slice(0, 4000),
+        };
+    },
+
+    async deleteMessage(account, mid) {
+        if (!account.sidToken) return;
+        await doFetch(`https://api.guerrillamail.com/ajax.php?f=del_email&email_ids[]=${encodeURIComponent(mid)}&sid_token=${encodeURIComponent(account.sidToken)}&site=guerrillamail.com`).catch(() => {});
+    },
+
+    async deleteAccount() {},
+};
+
+const TempMailLolProvider: TempProvider = {
+    id: "tempmail.lol",
+    name: "TempMail.lol",
+    description: "API: tempmail.lol — simple token inbox",
+    accent: "#a855f7",
+
+    async getDomains() {
+        try {
+            const r = await doFetch("https://api.tempmail.lol/domains");
+            if (!r.ok) throw new Error("domains fail");
+            const data: any = await r.json();
+            if (Array.isArray(data)) return data as string[];
+            if (data.domains) return data.domains;
+        } catch { }
+        return ["tempmail.lol", "tmpmail.org", "tmpmail.net"];
+    },
+
+    async createAccount(address: string) {
+        try {
+            const r = await doFetch("https://api.tempmail.lol/generate", { method: "POST" });
+            if (r.ok) {
+                const j: any = await r.json();
+                const email: string = j.address ?? j.email ?? address;
+                const token: string = j.token ?? randomString(20);
+                return {
+                    id: email,
+                    providerId: this.id,
+                    address: email,
+                    token,
+                    createdAt: Date.now(),
+                };
+            }
+        } catch { }
+        const at = address.indexOf("@");
+        const user = at >= 0 ? address.split("@")[0] : address || randomString(8);
+        const domains = await this.getDomains();
+        const email = `${user}@${domains[0]}`;
+        return { id: email, providerId: this.id, address: email, token: randomString(24), createdAt: Date.now() };
+    },
+
+    async getMessages(account) {
+        if (!account.token) return [];
+        try {
+            const r = await doFetch(`https://api.tempmail.lol/auth/${encodeURIComponent(account.token)}`, { headers: { Accept: "application/json" } });
+            if (!r.ok) return [];
+            const j: any = await r.json();
+            const emails: any[] = j.email ?? j.emails ?? j.messages ?? [];
+            if (Array.isArray(emails)) {
+                return emails.map((m: any, idx: number) => ({
+                    id: String(m.id ?? m._id ?? idx),
+                    from: { address: m.from ?? m.sender ?? "", name: "" },
+                    subject: m.subject ?? "",
+                    intro: (m.body ?? m.text ?? "").slice(0, 120),
+                    createdAt: new Date(m.date ?? m.createdAt ?? Date.now()).toISOString(),
+                    seen: !!m.seen,
+                    html: m.html ? [String(m.html)] : [] as string[],
+                    text: m.body ?? m.text ?? "",
+                }));
+            }
+        } catch { }
+        return [];
+    },
+
+    async getMessage(account, mid) {
+        const msgs = await this.getMessages(account);
+        const found = msgs.find(m => m.id === mid);
+        if (found) return { ...found, html: found.html ?? [], text: found.text ?? "" };
+        throw new Error("Message not found");
+    },
+
+    async deleteMessage() { },
+    async deleteAccount() { },
+};
+
+const MaildropProvider: TempProvider = {
+    id: "maildrop",
+    name: "Maildrop",
+    description: "API: maildrop.cc — instant, no auth",
+    accent: "#06b6d4",
+    async getDomains() { return ["maildrop.cc"]; },
+    async createAccount(address: string) {
+        const user = address.split("@")[0] || randomString(8);
+        const email = `${user}@maildrop.cc`;
+        return { id: email, providerId: this.id, address: email, login: user, domain: "maildrop.cc", createdAt: Date.now() };
+    },
+    async getMessages(account) {
+        if (!account.login) return [];
+        try {
+            const r = await doFetch(`https://maildrop.cc/api/inbox/${encodeURIComponent(account.login)}`, { headers: { Accept: "application/json" } });
+            if (!r.ok) return [];
+            const data: any = await r.json();
+            const list: any[] = Array.isArray(data) ? data : data.messages ?? [];
+            return list.map((m: any, idx: number) => ({
+                id: String(m.id ?? idx),
+                from: { address: m.from ?? m.sender ?? "", name: "" },
+                subject: m.subject ?? m.headers?.subject ?? "",
+                intro: (m.message ?? m.html ?? "").replace(/<[^>]+>/g, " ").slice(0, 120),
+                createdAt: new Date(m.date ?? m.headers?.date ?? Date.now()).toISOString(),
+                seen: false,
+                html: m.html ? [String(m.html)] : [] as string[],
+                text: (m.message ?? "").replace(/<[^>]+>/g, " "),
+            }));
+        } catch { return []; }
+    },
+    async getMessage(account, mid) {
+        const msgs = await this.getMessages(account);
+        const found = msgs.find(m => m.id === mid);
+        if (found) {
+            try {
+                const r = await doFetch(`https://maildrop.cc/api/message/${encodeURIComponent(account.login!)}/${encodeURIComponent(mid)}`);
+                if (r.ok) {
+                    const data: any = await r.json();
+                    return {
+                        ...found,
+                        html: data.html ? [String(data.html)] : (found.html ?? []),
+                        text: data.data ?? found.text,
+                    };
+                }
+            } catch { }
+            return { ...found, html: (found.html ?? []) as string[], text: found.text ?? "" };
+        }
+        throw new Error("Message not found");
+    },
+    async deleteMessage() { },
+    async deleteAccount() { },
+};
+
+const DropMailProvider: TempProvider = {
+    id: "dropmail",
+    name: "DropMail",
+    description: "API: dropmail.me — GraphQL session",
+    accent: "#ec4899",
+    async getDomains() { return ["dropmail.me"]; },
+    async createAccount(address: string) {
+        const user = address.split("@")[0] || randomString(8);
+        try {
+            const r = await doFetch("https://dropmail.me/api/graphql", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ query: "mutation { introduceSession { id, addresses, expiresAt } }" }),
+            });
+            if (r.ok) {
+                const j: any = await r.json();
+                const sess = j?.data?.introduceSession;
+                if (sess?.addresses?.[0]) {
+                    const email: string = sess.addresses[0];
+                    return { id: email, providerId: this.id, address: email, token: sess.id, login: email.split("@")[0], domain: "dropmail.me", createdAt: Date.now() };
+                }
+            }
+        } catch { }
+        const email = `${user}@dropmail.me`;
+        return { id: email, providerId: this.id, address: email, token: randomString(16), login: user, domain: "dropmail.me", createdAt: Date.now() };
+    },
+    async getMessages(account) {
+        if (!account.token) return [];
+        try {
+            const q = `query { session(id:"${account.token}") { mails { rawSize, fromAddr, toAddr, downloadUrl, text, html, headerSubject, receivedAt } } }`;
+            const r = await doFetch("https://dropmail.me/api/graphql", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ query: q }),
+            });
+            if (!r.ok) return [];
+            const j: any = await r.json();
+            const mails: any[] = j?.data?.session?.mails ?? [];
+            return mails.map((m: any, idx: number) => ({
+                id: String(idx),
+                from: { address: m.fromAddr ?? "", name: "" },
+                subject: m.headerSubject ?? "",
+                intro: (m.text ?? m.html ?? "").replace(/<[^>]+>/g, " ").slice(0, 120),
+                createdAt: new Date(m.receivedAt ?? Date.now()).toISOString(),
+                seen: false,
+                html: m.html ? [String(m.html)] : [] as string[],
+                text: m.text ?? "",
+            }));
+        } catch { return []; }
+    },
+    async getMessage(account, mid) {
+        const msgs = await this.getMessages(account);
+        const found = msgs.find(m => m.id === mid);
+        if (found) return { ...found, html: found.html ?? [], text: found.text ?? "" };
+        throw new Error("Message not found");
+    },
+    async deleteMessage() { },
+    async deleteAccount() { },
+};
+
+const TMailorProvider: TempProvider = {
+    id: "tmailor",
+    name: "TMailor",
+    description: "API: tmailor.com — fast temp mail",
+    accent: "#f97316",
+    async getDomains() {
+        try {
+            const r = await doFetch("https://api.tmailor.com/api/domain/list", { headers: { Accept: "application/json" } });
+            if (r.ok) {
+                const j: any = await r.json();
+                const list: string[] = j?.data ?? j?.domains ?? [];
+                if (Array.isArray(list) && list.length) return list.slice(0, 6);
+            }
+        } catch { }
+        return ["tmailor.com", "tmailor.net", "tmailor.org"];
+    },
+    async createAccount(address: string) {
+        const user = address.split("@")[0] || randomString(8);
+        const domains = await this.getDomains();
+        const email = `${user}@${domains[0]}`;
+        return { id: email, providerId: this.id, address: email, login: user, domain: domains[0], token: randomString(16), createdAt: Date.now() };
+    },
+    async getMessages(account) {
+        if (!account.login || !account.domain) return [];
+        try {
+            const r = await doFetch(`https://api.tmailor.com/api/email/list?email=${encodeURIComponent(account.address)}`, { headers: { Accept: "application/json" } });
+            if (!r.ok) return [];
+            const j: any = await r.json();
+            const list: any[] = j?.data ?? [];
+            return list.map((m: any, idx: number) => ({
+                id: String(m.id ?? idx),
+                from: { address: m.from ?? "", name: "" },
+                subject: m.subject ?? "",
+                intro: (m.text ?? m.html ?? "").replace(/<[^>]+>/g, " ").slice(0, 120),
+                createdAt: new Date(m.date ?? Date.now()).toISOString(),
+                seen: !!m.seen,
+                html: m.html ? [String(m.html)] : [] as string[],
+                text: m.text ?? "",
+            }));
+        } catch { return []; }
+    },
+    async getMessage(account, mid) {
+        const msgs = await this.getMessages(account);
+        const found = msgs.find(m => m.id === mid);
+        if (found) return { ...found, html: found.html ?? [], text: found.text ?? "" };
+        throw new Error("Message not found");
+    },
+    async deleteMessage() { },
+    async deleteAccount() { },
+};
+
+export const providers: TempProvider[] = [
+    createMailTmProvider("https://api.mail.tm", "mail.tm", "Mail.tm", "#5865f2"),
+    createMailTmProvider("https://api.mail.gw", "mail.gw", "Mail.gw", "#3b82f6"),
+    OneSecMailProvider,
+    GuerrillaProvider,
+    TempMailLolProvider,
+    MaildropProvider,
+    DropMailProvider,
+    TMailorProvider,
+];
+
+export const providerMap = new Map(providers.map(p => [p.id, p]));
+
+export function getProvider(id: string): TempProvider | undefined {
+    return providerMap.get(id) ?? providers[0];
+}
+
+export function listProviders() { return providers; }

@@ -1,0 +1,61 @@
+.vc-roblox-tag {
+    display: inline-flex;
+    align-items: center;
+    max-width: 180px;
+    margin-left: 6px;
+    color: var(--text-muted);
+    vertical-align: middle;
+    white-space: nowrap;
+}
+
+.vc-roblox-tag-content {
+    display: inline-flex;
+    align-items: center;
+    min-width: 0;
+    gap: 4px;
+}
+
+.vc-roblox-tag-separator {
+    margin-right: 5px;
+    color: var(--text-muted);
+}
+
+.vc-roblox-tag-avatar {
+    width: 16px;
+    height: 16px;
+    flex: 0 0 16px;
+    border-radius: 50%;
+    object-fit: cover;
+}
+
+.vc-roblox-tag-avatar-placeholder {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--background-modifier-selected);
+    color: var(--text-normal);
+    font-size: 10px;
+    font-weight: 700;
+}
+
+.vc-roblox-tag-username {
+    overflow: hidden;
+    color: var(--text-link);
+    font-size: 0.85em;
+    text-overflow: ellipsis;
+}
+
+.vc-roblox-tag-member {
+    max-width: 120px;
+    margin-left: 4px;
+}
+
+.vc-roblox-tag-member .vc-roblox-tag-avatar {
+    width: 14px;
+    height: 14px;
+    flex-basis: 14px;
+}
+
+.vc-roblox-tag-profile {
+    max-width: 220px;
+}

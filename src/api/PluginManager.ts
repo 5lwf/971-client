@@ -1,0 +1,697 @@
+/*
+ * Vencord, a modification for Discord's desktop app
+ * Copyright (c) 2022 Vendicated and contributors
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+*/
+
+import { addProfileBadge, removeProfileBadge } from "@api/Badges";
+import { addChatBarButton, addChatBarButtonWrapper, removeChatBarButton, removeChatBarButtonWrapper } from "@api/ChatButtons";
+import { registerCommand, unregisterCommand } from "@api/Commands";
+import { addContextMenuPatch, removeContextMenuPatch } from "@api/ContextMenu";
+import { addMemberListDecorator, removeMemberListDecorator } from "@api/MemberListDecorators";
+import { addMessageAccessory, removeMessageAccessory } from "@api/MessageAccessories";
+import { addMessageDecoration, removeMessageDecoration } from "@api/MessageDecorations";
+import { addMessageClickListener, addMessagePreEditListener, addMessagePreSendListener, removeMessageClickListener, removeMessagePreEditListener, removeMessagePreSendListener } from "@api/MessageEvents";
+import { addMessagePopoverButton, removeMessagePopoverButton } from "@api/MessagePopover";
+import { addNicknameIcon, removeNicknameIcon } from "@api/NicknameIcons";
+import { PluginHealth } from "@api/PluginHealth";
+import { PluginProfiler } from "@api/PluginProfiler";
+import { PlainSettings, Settings, SettingsStore } from "@api/Settings";
+import { disableStyle, enableStyle, removeStyle } from "@api/Styles";
+import { traceFunction } from "@debug/Tracer";
+import { Logger } from "@utils/Logger";
+import { sleep } from "@utils/misc";
+import { onlyOnce } from "@utils/onlyOnce";
+import { canonicalizeFind, canonicalizeReplacement } from "@utils/patches";
+import { DefinedSettings, Patch, Plugin, PluginDef, PluginSettingDef, ReporterTestable, StartAt } from "@utils/types";
+import { FluxEvents } from "@vencord/discord-types";
+import { FluxDispatcher } from "@webpack/common";
+import { patches, removePatchesByPlugin } from "@webpack/patcher";
+
+import Plugins from "~plugins";
+export { Plugins as plugins };
+
+import { getPluginId } from "@utils/pluginIds";
+
+import { addAudioProcessor, removeAudioProcessor } from "./AudioPlayer";
+import { addChannelToolbarButton, addHeaderBarButton, removeChannelToolbarButton, removeHeaderBarButton } from "./HeaderBar";
+import { addProfileCollection, removeProfileCollection } from "./ProfileCollections";
+import { addProfileSection, removeProfileSection } from "./ProfileSections";
+import { addUserAreaButton, removeUserAreaButton } from "./UserArea";
+
+const logger = new Logger("PluginManager", "#a6d189");
+
+export const PMLogger = logger;
+export const pluginStartTimings = new Map<string, { duration: number; success: boolean; }>();
+
+/** Whether we have subscribed to flux events of all the enabled plugins when FluxDispatcher was ready */
+let enabledPluginsSubscribedFlux = false;
+const subscribedFluxEventsPlugins = new Set<string>();
+
+function canonicalKey(p: string): string {
+    const plugin = (Plugins as any)[p];
+    if (!plugin) return p;
+    return getPluginId(plugin);
+}
+
+// isPluginEnabled is called from render paths (typing indicator, user area, every
+// message decoration guard, plugin cards) and from every plugin's dependency
+// resolution. Each call used to walk the quarantine list twice, hit the plugins
+// Proxy and then read `Settings.plugins[...]` through the Settings Proxy, so a
+// single render tick with a handful of decorations paid that cost per decoration.
+//
+// The result only depends on three things: the plugins registry (a bundle-time
+// constant), the settings object, and PluginHealth's safe-mode/quarantine state.
+// All three announce changes, so the cache is dropped there rather than polled.
+const enabledCache = new Map<string, boolean>();
+
+export function invalidatePluginEnabledCache() {
+    enabledCache.clear();
+}
+
+export function isPluginEnabled(p: string) {
+    const cached = enabledCache.get(p);
+    if (cached !== undefined) return cached;
+    return resolvePluginEnabled(p);
+}
+
+function resolvePluginEnabled(p: string) {
+    const plugin = (Plugins as any)[p];
+    const canonical = plugin ? getPluginId(plugin) : p;
+    // allow lookup by either canonical id or legacy name for backwards compat
+    const legacy = plugin?.name && plugin.name !== canonical ? plugin.name : (p !== canonical ? p : null);
+    const enabled = computePluginEnabled(p, plugin, canonical, legacy);
+    enabledCache.set(p, enabled);
+    return enabled;
+}
+
+function computePluginEnabled(p: string, plugin: any, canonical: string, legacy: string | null) {
+    if (plugin?.required) return true;
+    if (PluginHealth.isSafeModeEnabled()) return false;
+    if (PluginHealth.isQuarantined(canonical) || (legacy && PluginHealth.isQuarantined(legacy))) return false;
+
+    if (plugin?.isDependency) return true;
+
+    // Check raw plain settings first so we do not trigger default value generation
+    const raw = PlainSettings?.plugins as Record<string, any> | undefined;
+    if (raw) {
+        if (raw[canonical]?.enabled !== undefined) return raw[canonical].enabled;
+        if (legacy && raw[legacy]?.enabled !== undefined) return raw[legacy].enabled;
+        if (plugin?.aliases) {
+            for (const alias of plugin.aliases) {
+                if (raw[alias]?.enabled !== undefined) return raw[alias].enabled;
+            }
+        }
+    }
+
+    const canonicalEnabled = Settings.plugins[canonical]?.enabled;
+    if (canonicalEnabled !== undefined) return canonicalEnabled;
+
+    if (legacy && Settings.plugins[legacy]?.enabled !== undefined) {
+        return Settings.plugins[legacy].enabled;
+    }
+
+    if (plugin?.aliases) {
+        for (const alias of plugin.aliases) {
+            if (Settings.plugins[alias]?.enabled !== undefined) {
+                return Settings.plugins[alias].enabled;
+            }
+        }
+    }
+
+    return false;
+}
+export function isPluginRequired(p: string) {
+    return (
+        (Plugins as any)[p]?.required
+    ) ?? false;
+}
+export function getEffectivePluginSettingsKey(p: string): string {
+    const plugin = (Plugins as any)[p];
+    return plugin ? getPluginId(plugin) : p;
+}
+
+export function isSettingHidden(settings: DefinedSettings, setting: PluginSettingDef) {
+    if (!("hidden" in setting)) return false;
+
+    return typeof setting.hidden === "function"
+        ? setting.hidden.call(settings)
+        : Boolean(setting.hidden);
+}
+
+export function isSettingDisabled(settings: DefinedSettings, setting: PluginSettingDef) {
+    if (!("disabled" in setting)) return false;
+
+    return typeof setting.disabled === "function"
+        ? setting.disabled.call(settings)
+        : Boolean(setting.disabled);
+}
+
+export function hasAnyVisibleSettings({ settings }: Plugin) {
+    return !!settings && Object.values(settings.def).some(s => !isSettingHidden(settings, s));
+}
+
+export function addPatch(newPatch: Omit<Patch, "plugin">, pluginName: string, pluginPath = `Vencord.Plugins.plugins[${JSON.stringify(pluginName)}]`) {
+    // TODO: this causes crashes
+    if (pluginName === "Vesktop" && newPatch.find === ".STREAMING_AUTO_STREAMER_MODE,") return;
+    if (pluginName === "Equibop" && newPatch.find === ".STREAMING_AUTO_STREAMER_MODE,") return;
+
+    const patch = newPatch as Patch;
+    patch.plugin = pluginName;
+
+    if (IS_REPORTER) {
+        delete patch.predicate;
+        delete patch.group;
+    }
+
+    if (patch.predicate && !patch.predicate()) return;
+
+    canonicalizeFind(patch);
+    if (!Array.isArray(patch.replacement)) {
+        patch.replacement = [patch.replacement];
+    }
+
+    for (const replacement of patch.replacement) {
+        canonicalizeReplacement(replacement, pluginPath);
+
+        if (IS_REPORTER) {
+            delete replacement.predicate;
+        }
+    }
+
+    patch.replacement = patch.replacement.filter(({ predicate }) => !predicate || predicate());
+
+    patches.push(patch);
+}
+
+function isReporterTestable(p: Plugin, part: ReporterTestable) {
+    return p.reporterTestable == null
+        ? true
+        : (p.reporterTestable & part) === part;
+}
+
+export function pluginRequiresRestart(p: Plugin) {
+    return p.requiresRestart !== false && (
+        Boolean(p.requiresRestart) ||
+        Boolean(p.patches?.length) ||
+        (p.startAt !== undefined && p.startAt !== StartAt.WebpackReady)
+    );
+}
+
+function isDeferrablePlugin(p: Plugin): boolean {
+    if (!p || p.required || p.name.endsWith("API")) return false;
+    if (p.flux) return false;
+    if (p.patches?.length) return false;
+    if (p.start) return false;
+    return true;
+}
+
+export const startAllPlugins = traceFunction("startAllPlugins", async function startAllPlugins(target: StartAt) {
+    logger.info(`Starting plugins (stage ${target})`);
+
+    // Safe Mode and quarantine state live in DataStore (async). They must be
+    // loaded before any isPluginEnabled() call decides whether a plugin may
+    // start — otherwise the boot pass would see stale defaults and start
+    // plugins the user meant to keep disabled. Both loads are memoized.
+    await PluginHealth.loadSafeMode();
+    await PluginHealth.loadQuarantine();
+
+    // Activate profiler auto-instrumentation before any plugin runs so timers
+    // and listeners created during start() are attributed. Idempotent, so
+    // calling it on every stage is safe.
+    PluginProfiler.init();
+
+    const pending: Array<() => void> = [];
+    const deferred: Array<() => void> = [];
+    const deferIdleStarts = target === StartAt.WebpackReady
+        && (Settings.plugins as Record<string, any>).TestcordHelper?.deferredStartup === true;
+    const dependedUpon = new Set<string>();
+    if (deferIdleStarts) {
+        for (const name in Plugins) {
+            if (!isPluginEnabled(name)) continue;
+            for (const dep of Plugins[name].dependencies ?? []) dependedUpon.add(dep);
+        }
+    }
+    for (const name in Plugins) {
+        if (isPluginEnabled(name) && (!IS_REPORTER || isReporterTestable(Plugins[name], ReporterTestable.Start))) {
+            const p = Plugins[name];
+
+            const startAt = p.startAt ?? StartAt.WebpackReady;
+            if (startAt !== target) continue;
+
+            const run = () => startPlugin(Plugins[name]);
+            if (deferIdleStarts && isDeferrablePlugin(p) && !dependedUpon.has(p.name)) {
+                deferred.push(() => { if (isPluginEnabled(name)) run(); });
+            } else {
+                pending.push(run);
+            }
+        }
+    }
+    // Time-sliced: with hundreds of plugins a tight start loop blocks the main
+    // thread for seconds right when Discord paints its first screens. Handing
+    // control back to the event loop every ~12ms keeps startup interactive.
+    let lastSlice = performance.now();
+    for (const start of pending) {
+        try { start(); } catch (e) { logger.error("Failed to start plugin", e); }
+        if (performance.now() - lastSlice > 12) {
+            await sleep(0);
+            lastSlice = performance.now();
+        }
+    }
+    if (deferred.length > 0) {
+        const flush = () => {
+            for (const start of deferred) {
+                try { start(); } catch (e) { logger.error("Failed to start deferred plugin", e); }
+            }
+            deferred.length = 0;
+        };
+        const ric = (globalThis as any).requestIdleCallback as ((cb: () => void, opts?: { timeout: number; }) => void) | undefined;
+        if (typeof ric === "function") ric(flush, { timeout: 3000 });
+        else setTimeout(flush, 1000);
+    }
+
+    // After the final "WebpackReady" start pass, publish the set of enabled
+    // plugins to PluginHealth so the stability tracker can score sessions
+    // against a stable reference of "was actually enabled this session".
+    if (target === StartAt.WebpackReady) {
+        const enabled = Object.keys(Plugins).filter(isPluginEnabled);
+        PluginHealth.registerEnabledPlugins(enabled);
+    }
+});
+
+export function startDependenciesRecursive(p: Plugin) {
+    const settings = Settings.plugins as Record<string, any>;
+    let restartNeeded = false;
+    const failures: string[] = [];
+
+    p.dependencies?.forEach(d => {
+        const dep = (Plugins as any)[d];
+        const canonicalD = dep ? getPluginId(dep) : d;
+        const enabled = isPluginEnabled(canonicalD) || isPluginEnabled(d);
+        if (!enabled) {
+            if (!dep) {
+                logger.warn(`Plugin ${p.name} has unresolved dependency ${d}`);
+                return;
+            }
+            startDependenciesRecursive(dep);
+
+            // If the plugin has patches, don't start the plugin, just enable it.
+            (Settings.plugins as any)[canonicalD] = (Settings.plugins as any)[canonicalD] ?? {};
+            (Settings.plugins as any)[canonicalD].enabled = true;
+            (Settings.plugins as any)[d] = (Settings.plugins as any)[d] ?? {};
+            (Settings.plugins as any)[d].enabled = true;
+            dep.isDependency = true;
+
+            if (pluginRequiresRestart(dep)) {
+                logger.warn(`Enabling dependency ${d} requires restart.`);
+                restartNeeded = true;
+                return;
+            }
+
+            const result = startPlugin(dep);
+            if (!result) failures.push(d);
+        }
+    });
+
+    return { restartNeeded, failures };
+}
+
+// Original (user-authored) flux handlers, kept separate from the profiling
+// wrappers installed on p.flux. Without this, every subscribe/unsubscribe
+// cycle would wrap the previous wrapper again — stacking nested wrappers and
+// inflating profiler CPU/call counts.
+const originalFluxHandlers = new WeakMap<Plugin, Record<string, (...args: any[]) => any>>();
+
+export function subscribePluginFluxEvents(p: Plugin, fluxDispatcher: typeof FluxDispatcher) {
+    if (p.flux && !subscribedFluxEventsPlugins.has(p.name) && (!IS_REPORTER || isReporterTestable(p, ReporterTestable.FluxEvents))) {
+        subscribedFluxEventsPlugins.add(p.name);
+
+        logger.debug("Subscribing to flux events of plugin", p.name);
+        const originals = originalFluxHandlers.get(p) ?? {};
+        for (const [event, currentHandler] of Object.entries(p.flux)) {
+            // p.flux[event] may already be a wrapper from a previous subscribe
+            // cycle; always wrap the original handler, never the wrapper.
+            const original = originals[event] ?? currentHandler;
+            originals[event] = original;
+
+            const wrappedHandler = p.flux[event] = function () {
+                try {
+                    const res = PluginProfiler.profileCall<void | Promise<void>>(p.name, `flux:${event}`, original, p, arguments);
+                    return res instanceof Promise
+                        ? res.catch(e => {
+                            logger.error(`${p.name}: Error while handling ${event}\n`, e);
+                            PluginHealth.recordRuntimeError(p.name, `flux:${event}`, e);
+                        })
+                        : res;
+                } catch (e) {
+                    logger.error(`${p.name}: Error while handling ${event}\n`, e);
+                    PluginHealth.recordRuntimeError(p.name, `flux:${event}`, e);
+                }
+            };
+
+            fluxDispatcher.subscribe(event as FluxEvents, wrappedHandler);
+        }
+        originalFluxHandlers.set(p, originals);
+    }
+}
+
+export function unsubscribePluginFluxEvents(p: Plugin, fluxDispatcher: typeof FluxDispatcher) {
+    if (p.flux) {
+        subscribedFluxEventsPlugins.delete(p.name);
+
+        logger.debug("Unsubscribing from flux events of plugin", p.name);
+        for (const [event, handler] of Object.entries(p.flux)) {
+            fluxDispatcher.unsubscribe(event as FluxEvents, handler!);
+        }
+    }
+}
+
+export function subscribeAllPluginsFluxEvents(fluxDispatcher: typeof FluxDispatcher) {
+    enabledPluginsSubscribedFlux = true;
+
+    for (const name in Plugins) {
+        if (!isPluginEnabled(name)) continue;
+        subscribePluginFluxEvents(Plugins[name], fluxDispatcher);
+    }
+}
+
+export const startPlugin = traceFunction("startPlugin", function startPlugin(p: Plugin) {
+    const startedAt = performance.now();
+    const finish = (success: boolean) => {
+        pluginStartTimings.set(p.name, { duration: performance.now() - startedAt, success });
+        return success;
+    };
+    const {
+        name, commands, contextMenus, managedStyle, userProfileBadges,
+        onBeforeMessageEdit, onBeforeMessageSend, onMessageClick,
+        chatBarButton, renderMemberListDecorator, renderMessageAccessory, renderMessageDecoration, messagePopoverButton,
+        renderChatBarButton,
+        // Custom
+        renderNicknameIcon, headerBarButton, audioProcessor, userAreaButton, renderProfileCollection, chatBarButtonWrapper,
+        renderProfileSection
+    } = p;
+
+    PluginProfiler.instrumentPlugin(p);
+    PluginProfiler.registerPlugin(name);
+
+    if (p.start) {
+        logger.info("Starting plugin", name);
+        if (p.started) {
+            logger.warn(`${name} already started`);
+            return finish(false);
+        }
+        try {
+            PluginProfiler.profileExecution(name, "start", () => p.start!());
+        } catch (e: any) {
+            logger.error(`Failed to start ${name}\n`, e);
+            PluginHealth.recordRuntimeError(name, "start", e);
+            PluginHealth.recordCrash({
+                pluginName: name,
+                reason: `Failed to start: ${e?.message ?? String(e)}`,
+                stack: e?.stack
+            });
+            return finish(false);
+        }
+    }
+
+    p.started = true;
+
+    if (commands?.length) {
+        logger.debug("Registering commands of plugin", name);
+        for (const cmd of commands) {
+            try {
+                registerCommand(cmd, name);
+            } catch (e) {
+                logger.error(`Failed to register command ${cmd.name}\n`, e);
+                return finish(false);
+            }
+        }
+    }
+
+    if (enabledPluginsSubscribedFlux) {
+        subscribePluginFluxEvents(p, FluxDispatcher);
+    }
+
+    if (contextMenus) {
+        logger.debug("Adding context menus patches of plugin", name);
+        for (const navId in contextMenus) {
+            addContextMenuPatch(navId, contextMenus[navId]);
+        }
+    }
+
+    if (managedStyle) enableStyle(managedStyle);
+
+    if (userProfileBadges) userProfileBadges.forEach(e => addProfileBadge(e));
+
+    if (onBeforeMessageEdit) addMessagePreEditListener(onBeforeMessageEdit);
+    if (onBeforeMessageSend) addMessagePreSendListener(onBeforeMessageSend);
+    if (onMessageClick) addMessageClickListener(onMessageClick);
+
+    if (chatBarButton) addChatBarButton(name, chatBarButton.render, chatBarButton.icon);
+    if (renderChatBarButton) addChatBarButton(name, renderChatBarButton as any, () => null);
+    if (renderMemberListDecorator) addMemberListDecorator(name, renderMemberListDecorator);
+    if (renderMessageDecoration) addMessageDecoration(name, renderMessageDecoration);
+    if (renderMessageAccessory) addMessageAccessory(name, renderMessageAccessory);
+    if (messagePopoverButton) addMessagePopoverButton(name, messagePopoverButton.render, messagePopoverButton.icon);
+
+    // Custom
+    if (renderNicknameIcon) addNicknameIcon(name, renderNicknameIcon);
+    if (headerBarButton) {
+        if (headerBarButton.location === "channeltoolbar") {
+            addChannelToolbarButton(name, headerBarButton.render, headerBarButton.priority);
+        } else {
+            addHeaderBarButton(name, headerBarButton.render, headerBarButton.priority);
+        }
+    }
+    if (audioProcessor) addAudioProcessor(name, audioProcessor);
+    if (userAreaButton) addUserAreaButton(name, userAreaButton.render, userAreaButton.priority);
+    if (renderProfileCollection) addProfileCollection(name, renderProfileCollection.render, renderProfileCollection.priority);
+    if (chatBarButtonWrapper) addChatBarButtonWrapper(name, chatBarButtonWrapper.wrapper, chatBarButtonWrapper.priority);
+    if (renderProfileSection) addProfileSection(name, renderProfileSection.render, renderProfileSection.priority);
+
+    return finish(true);
+}, p => `startPlugin ${p.name}`);
+
+export const stopPlugin = traceFunction("stopPlugin", function stopPlugin(p: Plugin) {
+    const {
+        name, commands, contextMenus, managedStyle, userProfileBadges,
+        onBeforeMessageEdit, onBeforeMessageSend, onMessageClick,
+        chatBarButton, renderMemberListDecorator, renderMessageAccessory, renderMessageDecoration, messagePopoverButton,
+        renderChatBarButton,
+        // Custom
+        renderNicknameIcon, headerBarButton, audioProcessor, userAreaButton, renderProfileCollection, chatBarButtonWrapper,
+        renderProfileSection
+    } = p;
+
+    if (p.stop) {
+        logger.info("Stopping plugin", name);
+        if (!p.started) {
+            logger.warn(`${name} already stopped`);
+            return false;
+        }
+        try {
+            PluginProfiler.profileExecution(name, "stop", () => p.stop!());
+        } catch (e) {
+            logger.error(`Failed to stop ${name}\n`, e);
+            PluginHealth.recordRuntimeError(name, "stop", e);
+            return false;
+        }
+    }
+
+    p.started = false;
+
+    removePatchesByPlugin(name);
+
+    if (managedStyle) removeStyle(managedStyle);
+
+    if (commands?.length) {
+        logger.debug("Unregistering commands of plugin", name);
+        for (const cmd of commands) {
+            try {
+                unregisterCommand(cmd.name);
+            } catch (e) {
+                logger.error(`Failed to unregister command ${cmd.name}\n`, e);
+                return false;
+            }
+        }
+    }
+
+    unsubscribePluginFluxEvents(p, FluxDispatcher);
+
+    if (contextMenus) {
+        logger.debug("Removing context menus patches of plugin", name);
+        for (const navId in contextMenus) {
+            removeContextMenuPatch(navId, contextMenus[navId]);
+        }
+    }
+
+    if (managedStyle) disableStyle(managedStyle);
+
+    if (userProfileBadges) userProfileBadges.forEach(e => removeProfileBadge(e));
+
+    if (onBeforeMessageEdit) removeMessagePreEditListener(onBeforeMessageEdit);
+    if (onBeforeMessageSend) removeMessagePreSendListener(onBeforeMessageSend);
+    if (onMessageClick) removeMessageClickListener(onMessageClick);
+
+    if (chatBarButton) removeChatBarButton(name);
+    if (renderChatBarButton) removeChatBarButton(name);
+    if (renderMemberListDecorator) removeMemberListDecorator(name);
+    if (renderMessageDecoration) removeMessageDecoration(name);
+    if (renderMessageAccessory) removeMessageAccessory(name);
+    if (messagePopoverButton) removeMessagePopoverButton(name);
+
+    // Custom
+    if (renderNicknameIcon) removeNicknameIcon(name);
+    if (headerBarButton) {
+        if (headerBarButton.location === "channeltoolbar") {
+            removeChannelToolbarButton(name);
+        } else {
+            removeHeaderBarButton(name);
+        }
+    }
+    if (audioProcessor) removeAudioProcessor(name);
+    if (userAreaButton) removeUserAreaButton(name);
+    if (renderProfileCollection) removeProfileCollection(name);
+    if (chatBarButtonWrapper) removeChatBarButtonWrapper(name);
+    if (renderProfileSection) removeProfileSection(name);
+
+    return true;
+}, p => `stopPlugin ${p.name}`);
+
+export const initPluginManager = onlyOnce(function init() {
+    const pluginsValues = Object.values(Plugins) as Plugin[];
+    const settings = Settings.plugins as Record<string, any>;
+
+    // Migrate legacy name-keyed settings to stable ids.
+    // This runs once at startup; it copies enabled + per-plugin settings
+    // from the old `name` key to the new `id` key if the latter is empty.
+    for (const p of pluginsValues) {
+        const cid = getPluginId(p);
+        if (p.settings) p.settings.pluginName = cid;
+
+        if (cid !== p.name) {
+            const raw = PlainSettings?.plugins as Record<string, any> | undefined;
+            const legacy = raw?.[p.name];
+            const canonical = raw?.[cid];
+            if (legacy && !canonical) {
+                (Settings.plugins as any)[cid] = { ...legacy };
+            } else if (legacy && canonical && legacy.enabled !== undefined && canonical.enabled === undefined) {
+                (Settings.plugins as any)[cid].enabled = legacy.enabled;
+            }
+        }
+        // alias migration
+        for (const alias of (p as any).aliases ?? []) {
+            const raw = PlainSettings?.plugins as Record<string, any> | undefined;
+            const aVal = raw?.[alias];
+            if (aVal && !raw?.[cid]) {
+                (Settings.plugins as any)[cid] = { ...aVal };
+            }
+        }
+    }
+
+    const pluginKeysToBind: Array<keyof PluginDef & `${"on" | "render"}${string}`> = [
+        "onBeforeMessageEdit", "onBeforeMessageSend", "onMessageClick",
+        "renderMemberListDecorator", "renderMessageAccessory", "renderMessageDecoration",
+        "renderChatBarButton",
+        // Custom
+        "renderNicknameIcon"
+    ];
+
+    const neededApiPlugins = new Set<string>();
+
+    // First round-trip to mark and force enable dependencies
+    //
+    // FIXME: might need to revisit this if there's ever nested (dependencies of dependencies) dependencies since this only
+    // goes for the top level and their children, but for now this works okay with the current API plugins
+    for (const p of pluginsValues) if (isPluginEnabled(p.name)) {
+        p.dependencies?.forEach(d => {
+            const dep = Plugins[d];
+
+            if (!dep) {
+                const error = new Error(`Plugin ${p.name} has unresolved dependency ${d}`);
+
+                if (IS_DEV) {
+                    throw error;
+                }
+
+                logger.warn(error);
+                return;
+            }
+
+            const cid = getPluginId(dep);
+            (Settings.plugins as any)[cid] = (Settings.plugins as any)[cid] ?? {};
+            (Settings.plugins as any)[cid].enabled = true;
+            (Settings.plugins as any)[d] = (Settings.plugins as any)[d] ?? {};
+            (Settings.plugins as any)[d].enabled = true;
+            dep.isDependency = true;
+        });
+
+        if (p.commands?.length) neededApiPlugins.add("CommandsAPI");
+        if (p.onBeforeMessageEdit || p.onBeforeMessageSend || p.onMessageClick) neededApiPlugins.add("MessageEventsAPI");
+        if (p.chatBarButton || p.renderChatBarButton) neededApiPlugins.add("ChatInputButtonAPI");
+        if (p.renderMemberListDecorator) neededApiPlugins.add("MemberListDecoratorsAPI");
+        if (p.renderMessageAccessory) neededApiPlugins.add("MessageAccessoriesAPI");
+        if (p.renderMessageDecoration) neededApiPlugins.add("MessageDecorationsAPI");
+        if (p.messagePopoverButton) neededApiPlugins.add("MessagePopoverAPI");
+        if (p.userProfileBadge) neededApiPlugins.add("BadgeAPI");
+
+        // Custom
+        if (p.renderNicknameIcon) neededApiPlugins.add("NicknameIconsAPI");
+        if (p.headerBarButton) neededApiPlugins.add("HeaderBarAPI");
+        if (p.audioProcessor) neededApiPlugins.add("AudioPlayerAPI");
+        if (p.userAreaButton) neededApiPlugins.add("UserAreaAPI");
+        if (p.renderProfileCollection) neededApiPlugins.add("ProfileCollectionsAPI");
+        if (p.chatBarButtonWrapper) neededApiPlugins.add("ChatInputButtonAPI");
+        if (p.renderProfileSection) neededApiPlugins.add("ProfileSectionsAPI");
+
+        for (const key of pluginKeysToBind) {
+            p[key] &&= (p[key] as Function).bind(p) as any;
+        }
+    }
+
+    for (const p of neededApiPlugins) {
+        Plugins[p].isDependency = true;
+        settings[p].enabled = true;
+    }
+
+    for (const p of pluginsValues) {
+        if (p.settings) {
+            p.settings.pluginName = getPluginId(p);
+
+            if (isPluginEnabled(p.name)) {
+                const keyBase = getPluginId(p);
+                for (const [key, def] of Object.entries(p.settings.def)) {
+                    if (def.onChange)
+                        SettingsStore.addChangeListener(`plugins.${keyBase}.${key}`, def.onChange);
+                }
+            }
+        }
+
+        if (p.patches && isPluginEnabled(p.name)) {
+            if (!IS_REPORTER || isReporterTestable(p, ReporterTestable.Patches)) {
+                for (const patch of p.patches) {
+                    addPatch(patch, p.name);
+                }
+            }
+        }
+    }
+
+    // Keep the isPluginEnabled memo honest. Every `enabled` write, safe-mode flip
+    // and quarantine change lands here; nothing else can change the answer.
+    SettingsStore.addGlobalChangeListener((_, path) => {
+        if (path === "" || path.startsWith("plugins.")) invalidatePluginEnabledCache();
+    });
+    PluginHealth.subscribe(invalidatePluginEnabledCache);
+});

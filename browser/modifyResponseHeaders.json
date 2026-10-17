@@ -1,0 +1,163 @@
+[
+    {
+        "id": 1,
+        "action": {
+            "type": "modifyHeaders",
+            "responseHeaders": [
+                {
+                    "header": "content-security-policy",
+                    "operation": "remove"
+                },
+                {
+                    "header": "content-security-policy-report-only",
+                    "operation": "remove"
+                }
+            ]
+        },
+        "condition": {
+            "resourceTypes": ["main_frame", "sub_frame"],
+            "urlFilter": "||discord.com^"
+        }
+    },
+    {
+        "id": 2,
+        "action": {
+            "type": "modifyHeaders",
+            "responseHeaders": [
+                {
+                    "header": "content-type",
+                    "operation": "set",
+                    "value": "text/css"
+                }
+            ]
+        },
+        "condition": {
+            "resourceTypes": ["stylesheet"],
+            "urlFilter": "||raw.githubusercontent.com^"
+        }
+    },
+    {
+        "id": 3,
+        "action": {
+            "type": "modifyHeaders",
+            "responseHeaders": [
+                {
+                    "header": "Access-Control-Allow-Origin",
+                    "operation": "set",
+                    "value": "*"
+                },
+                {
+                    "header": "Access-Control-Allow-Headers",
+                    "operation": "set",
+                    "value": "*"
+                },
+                {
+                    "header": "Access-Control-Allow-Methods",
+                    "operation": "set",
+                    "value": "GET, POST, PUT, DELETE, OPTIONS"
+                }
+            ]
+        },
+        "condition": {
+            "resourceTypes": ["xmlhttprequest"],
+            "urlFilter": "||api.groq.com^"
+        }
+    },
+    {
+        "id": 4,
+        "action": {
+            "type": "modifyHeaders",
+            "responseHeaders": [
+                {
+                    "header": "Access-Control-Allow-Origin",
+                    "operation": "set",
+                    "value": "*"
+                },
+                {
+                    "header": "Access-Control-Allow-Headers",
+                    "operation": "set",
+                    "value": "*"
+                },
+                {
+                    "header": "Access-Control-Allow-Methods",
+                    "operation": "set",
+                    "value": "GET, POST, PUT, DELETE, OPTIONS"
+                }
+            ]
+        },
+        "condition": {
+            "resourceTypes": ["xmlhttprequest"],
+            "urlFilter": "||api.openai.com^"
+        }
+    },
+    {
+        "id": 5,
+        "action": {
+            "type": "modifyHeaders",
+            "responseHeaders": [
+                {
+                    "header": "Access-Control-Allow-Origin",
+                    "operation": "set",
+                    "value": "*"
+                },
+                {
+                    "header": "Access-Control-Allow-Headers",
+                    "operation": "set",
+                    "value": "*"
+                },
+                {
+                    "header": "Access-Control-Allow-Methods",
+                    "operation": "set",
+                    "value": "GET, POST, PUT, DELETE, OPTIONS"
+                }
+            ]
+        },
+        "condition": {
+            "resourceTypes": ["xmlhttprequest"],
+            "urlFilter": "||api.cord.cat^"
+        }
+    },
+    {
+        "id": 6,
+        "action": {
+            "type": "modifyHeaders",
+            "responseHeaders": [
+                {
+                    "header": "Access-Control-Allow-Origin",
+                    "operation": "set",
+                    "value": "*"
+                },
+                {
+                    "header": "Access-Control-Allow-Headers",
+                    "operation": "set",
+                    "value": "*"
+                },
+                {
+                    "header": "Access-Control-Allow-Methods",
+                    "operation": "set",
+                    "value": "GET, POST, PUT, DELETE, OPTIONS"
+                }
+            ]
+        },
+        "condition": {
+            "resourceTypes": ["xmlhttprequest"],
+            "urlFilter": "||geoseeer.com^"
+        }
+    },
+    {
+        "id": 7,
+        "action": {
+            "type": "modifyHeaders",
+            "requestHeaders": [
+                {
+                    "header": "origin",
+                    "operation": "remove"
+                }
+            ]
+        },
+        "condition": {
+            "resourceTypes": ["xmlhttprequest"],
+            "urlFilter": "||api.cord.cat^"
+        }
+    }
+]

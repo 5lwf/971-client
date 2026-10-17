@@ -1,0 +1,243 @@
+.vc-plugin-modal-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    position: relative;
+}
+
+.vc-plugin-modal-header h1 {
+    margin: 0;
+}
+
+.vc-plugin-modal-header-content {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    flex: 1;
+}
+
+.vc-plugin-modal-header-trailing {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 4px;
+}
+
+.vc-plugin-modal-title {
+    color: var(--text-strong);
+    padding-right: 32px;
+}
+
+.vc-plugin-modal-description {
+    color: var(--text-subtle);
+    padding-right: 60px;
+}
+
+.vc-plugin-modal-links {
+    display: flex;
+    gap: 4px;
+    margin-left: auto;
+}
+
+.vc-plugin-modal-confirm [class*="footer"] {
+    flex-direction: row-reverse;
+    gap: var(--space-8, 8px);
+}
+
+.vc-plugin-modal-confirm [class*="footer"] > button {
+    flex: 1;
+    margin: 0;
+    width: 100%;
+}
+
+.vc-plugin-modal-warning {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    color: var(--text-feedback-critical);
+}
+
+.vc-settings-modal-content {
+    padding-bottom: 24px;
+}
+
+.vc-plugin-modal-info {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding-top: 2px;
+}
+
+.vc-plugin-modal-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 8px;
+}
+
+.vc-plugin-modal-tag {
+    padding: 3px 8px;
+    border: 1px solid var(--border-subtle);
+    border-radius: 6px;
+    background-color: var(--background-base-low);
+    color: var(--text-muted);
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 16px;
+}
+
+.vc-plugin-modal-section {
+    padding: 14px;
+    border: 1px solid var(--border-subtle);
+    border-radius: 8px;
+    background-color: var(--background-base-low);
+}
+
+.vc-plugin-modal-section + .vc-plugin-modal-section {
+    margin-top: 12px;
+}
+
+.vc-plugin-modal-authors {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.vc-plugin-modal-author {
+    min-width: 0;
+    max-width: 190px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px;
+    border: 1px solid var(--border-subtle);
+    border-radius: 8px;
+    background-color: var(--background-surface-high);
+    color: var(--text-default);
+}
+
+.vc-plugin-modal-author:hover {
+    background-color: var(--background-modifier-hover);
+}
+
+.vc-plugin-modal-author-avatar {
+    width: 28px;
+    height: 28px;
+    flex: 0 0 auto;
+    border-radius: 50%;
+}
+
+.vc-plugin-modal-footer {
+    padding-top: 14px;
+    border-top: 1px solid var(--border-subtle);
+}
+
+.vc-plugin-modal-about-box {
+    padding: 16px;
+    border-radius: 8px;
+    border: 1px solid var(--border-subtle);
+    background-color: var(--background-base-low);
+}
+
+.vc-plugin-modal-warning-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 2px 7px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 16px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    cursor: default;
+    vertical-align: middle;
+    flex-shrink: 0;
+}
+
+.vc-plugin-modal-warning-badge.vc-plugin-modal-warning-experimental {
+    background-color: color-mix(in srgb, #e67e22 20%, transparent);
+    color: #f39c12;
+    border: 1px solid color-mix(in srgb, #e67e22 50%, transparent);
+}
+
+.vc-plugin-modal-warning-badge.vc-plugin-modal-warning-legacy {
+    background-color: color-mix(in srgb, #d35400 20%, transparent);
+    color: #e67e22;
+    border: 1px solid color-mix(in srgb, #d35400 50%, transparent);
+}
+
+.vc-plugin-modal-warning-icon {
+    width: 14px;
+    height: 14px;
+    object-fit: contain;
+    display: block;
+    image-rendering: -webkit-optimize-contrast;
+    flex-shrink: 0;
+}
+
+.vc-plugin-modal-warning-banner {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 12px 16px;
+    border-radius: 8px;
+    margin-bottom: 14px;
+}
+
+.vc-plugin-modal-warning-banner.vc-plugin-modal-warning-banner-experimental {
+    background-color: color-mix(in srgb, #e67e22 12%, transparent);
+    border: 1px solid color-mix(in srgb, #e67e22 40%, transparent);
+}
+
+.vc-plugin-modal-warning-banner.vc-plugin-modal-warning-banner-legacy {
+    background-color: color-mix(in srgb, #d35400 12%, transparent);
+    border: 1px solid color-mix(in srgb, #d35400 40%, transparent);
+}
+
+.vc-plugin-modal-warning-banner-icon {
+    width: 36px;
+    height: 36px;
+    object-fit: contain;
+    flex-shrink: 0;
+    image-rendering: -webkit-optimize-contrast;
+}
+
+.vc-plugin-modal-warning-banner-title {
+    display: block;
+    font-size: 14px;
+    font-weight: 700;
+    margin-bottom: 2px;
+    color: var(--text-strong);
+}
+
+.vc-plugin-modal-warning-banner-desc {
+    margin: 0;
+    color: var(--text-muted);
+    font-size: 12px;
+    line-height: 16px;
+}
+
+.vc-plugin-modal-warning-badge.vc-plugin-modal-warning-clickable {
+    cursor: pointer;
+}
+
+.vc-plugin-modal-warning-badge.vc-plugin-modal-warning-clickable:hover {
+    opacity: 0.85;
+}
+
+.vc-plugin-modal-warning-banner-action {
+    margin-top: 8px;
+}
+
+.vc-plugin-modal-replacement-btn {
+    font-size: 12px !important;
+    font-weight: 600 !important;
+    padding: 2px 12px !important;
+    height: 28px !important;
+    min-height: 28px !important;
+}

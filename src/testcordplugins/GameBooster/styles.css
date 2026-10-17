@@ -1,0 +1,165 @@
+/*
+ * Vencord, a Discord client mod
+ * Copyright (c) 2026 Vendicated and contributors
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
+html[data-971-game-booster] {
+    scroll-behavior: auto;
+}
+
+html[data-971-game-booster="performance"] [class],
+html[data-971-game-booster="ultra"] [class] {
+    box-shadow: none;
+    backdrop-filter: none;
+}
+
+html[data-971-game-booster="performance"] [class],
+html[data-971-game-booster="performance"] [class]::before,
+html[data-971-game-booster="performance"] [class]::after,
+html[data-971-game-booster="ultra"] [class],
+html[data-971-game-booster="ultra"] [class]::before,
+html[data-971-game-booster="ultra"] [class]::after {
+    animation-duration: 0.01ms;
+    animation-delay: 0ms;
+    transition-duration: 0.01ms;
+    transition-delay: 0ms;
+    scroll-behavior: auto;
+}
+
+html[data-971-game-booster="ultra"] [class] {
+    box-shadow: none;
+}
+
+.vc-971-game-booster-dashboard {
+    margin-block: 4px 18px;
+    padding: 16px;
+    border: 1px solid var(--background-modifier-accent);
+    border-radius: 12px;
+    background: var(--background-secondary);
+}
+
+.vc-971-game-booster-dashboard-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.vc-971-game-booster-dashboard-header h3,
+.vc-971-game-booster-monitor h3,
+.vc-971-game-booster-comparison h4 {
+    margin: 4px 0 0;
+    color: var(--header-primary);
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.vc-971-game-booster-kicker {
+    color: var(--text-muted);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: .08em;
+}
+
+.vc-971-game-booster-status {
+    padding: 5px 9px;
+    border-radius: 999px;
+    background: var(--background-modifier-accent);
+    color: var(--header-primary);
+    font-size: 11px;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.vc-971-game-booster-status.is-active {
+    background: color-mix(in srgb, var(--green-360) 20%, var(--background-secondary));
+    color: var(--green-360);
+}
+
+.vc-971-game-booster-summary {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(138px, 1fr));
+    gap: 8px;
+    margin-top: 12px;
+}
+
+.vc-971-game-booster-summary > div {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    min-width: 0;
+    padding: 10px;
+    border: 1px solid var(--background-modifier-accent);
+    border-radius: 8px;
+    background: var(--background-primary);
+}
+
+.vc-971-game-booster-summary span {
+    color: var(--text-muted);
+    font-size: 11px;
+}
+
+.vc-971-game-booster-summary strong {
+    color: var(--header-primary);
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+}
+
+.vc-971-game-booster-dashboard > p,
+.vc-971-game-booster-comparison > p {
+    margin: 12px 0 0;
+    color: var(--text-muted);
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+.vc-971-game-booster-monitor {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+    gap: 8px;
+    margin-block: 10px 16px;
+}
+
+.vc-971-game-booster-monitor > h3,
+.vc-971-game-booster-comparison {
+    grid-column: 1 / -1;
+}
+
+.vc-971-game-booster-comparison {
+    padding-top: 6px;
+}
+
+.vc-971-game-booster-comparison h4 {
+    font-size: 13px;
+}
+
+.vc-971-game-booster-metric {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    min-width: 0;
+    padding: 10px 12px;
+    border: 1px solid var(--background-modifier-accent);
+    border-radius: 8px;
+    background: var(--background-secondary);
+}
+
+.vc-971-game-booster-metric span {
+    color: var(--text-muted);
+    font-size: 11px;
+}
+
+.vc-971-game-booster-metric strong {
+    color: var(--header-primary);
+    font-size: 15px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+
+.vc-971-game-booster-monitor > p {
+    grid-column: 1 / -1;
+    margin: 0;
+    color: var(--text-muted);
+    font-size: 12px;
+}

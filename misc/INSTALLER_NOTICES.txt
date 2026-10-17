@@ -1,0 +1,9 @@
+971 Client CLI Installer
+Copyright (c) 2026 971 Client contributors.
+Licensed under GPL-3.0-or-later. The corresponding launcher source is scripts/installerLauncher.cs.
+
+The embedded CLI installer is the unmodified Windows_Testcord_installer-rel_cli.exe from the official Testcord release. Its SHA-256 is checked by scripts/buildWindowsCliInstaller.ps1 before packaging.
+Original installer source and license: https://github.com/TestcordDev/Testcordinstaller (GPL-3.0).
+Original installer release: https://github.com/TestcordDev/TestCord/releases/latest
+
+971 Client includes and preserves work from the Testcord, Equicord, Vencord, and wider open-source communities. See LICENSE and About 971 Client for project credits.

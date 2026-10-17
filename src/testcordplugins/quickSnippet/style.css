@@ -1,0 +1,6 @@
+.qs-quickcss-append-button {
+    background-color: inherit !important; /* Button.Looks.FILLED paints a brand background inside the code block */
+    padding: 0;
+    display: inline;
+    margin-left: 5px;
+}

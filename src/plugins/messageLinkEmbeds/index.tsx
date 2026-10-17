@@ -1,0 +1,460 @@
+/*
+ * Vencord, a modification for Discord's desktop app
+ * Copyright (c) 2022 Vendicated and contributors
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+*/
+
+import { TestcordRequestCoordinator } from "@api/index";
+import { addMessageAccessory, removeMessageAccessory } from "@api/MessageAccessories";
+import { updateMessage } from "@api/MessageUpdater";
+import { definePluginSettings } from "@api/Settings";
+import { getUserSettingLazy } from "@api/UserSettings";
+import { BaseText } from "@components/BaseText";
+import { Devs } from "@utils/constants.js";
+import { Logger } from "@utils/Logger";
+import { Queue } from "@utils/Queue";
+import definePlugin, { OptionType } from "@utils/types";
+import { Channel, Message } from "@vencord/discord-types";
+import { findComponentByCodeLazy, findComponentLazy, findCssClassesLazy } from "@webpack";
+import {
+    Button,
+    ChannelStore,
+    GuildStore,
+    IconUtils,
+    MessageStore,
+    Parser,
+    PermissionsBits,
+    PermissionStore,
+    UserStore
+} from "@webpack/common";
+import { ComponentType, JSX } from "react";
+
+const messageCache = new Map<string, {
+    message?: Message;
+    fetched: boolean;
+    /** Epoch ms before which no new fetch may be started for this key. */
+    retryAfter?: number;
+}>();
+
+/**
+ * Keys whose current cooldown has already been reported, so a failing link logs once per
+ * window rather than once per attempt. Cleared alongside `messageCache` so it cannot grow
+ * past the number of cached messages.
+ */
+const cooldownLogged = new Set<string>();
+
+const getCacheKey = (channelId: string, messageId: string) => `${channelId}:${messageId}`;
+const logger = new Logger("MessageLinkEmbeds");
+
+const Embed = findComponentLazy(m => m.prototype?.renderSuppressButton);
+const ChannelMessage = findComponentByCodeLazy("childrenExecutedCommand:", ".hideAccessories");
+let AutoModEmbed: ComponentType<any> = () => null;
+
+const EmbedClasses = findCssClassesLazy("embedAuthorIcon", "embedAuthor", "embedAuthor", "embedMargin");
+
+const MessageDisplayCompact = getUserSettingLazy("textAndImages", "messageDisplayCompact")!;
+
+const messageLinkRegex = /(?<!<)https?:\/\/(?:\w+\.)?discord(?:app)?\.com\/channels\/(?:\d{17,20}|@me)\/(\d{17,20})\/(\d{17,20})/g;
+const tenorRegex = /^https:\/\/(?:www\.)?tenor\.com\//;
+
+interface Attachment {
+    height: number;
+    width: number;
+    url: string;
+    proxyURL?: string;
+}
+
+interface MessageEmbedProps {
+    message: Message;
+    channel: Channel;
+}
+
+const messageFetchQueue = new Queue();
+
+const settings = definePluginSettings({
+    messageBackgroundColor: {
+        description: "Background color for messages in rich embeds",
+        type: OptionType.BOOLEAN
+    },
+    automodEmbeds: {
+        description: "Use automod embeds instead of rich embeds (smaller but less info)",
+        type: OptionType.SELECT,
+        options: [
+            {
+                label: "Always use automod embeds",
+                value: "always"
+            },
+            {
+                label: "Prefer automod embeds, but use rich embeds if some content can't be shown",
+                value: "prefer"
+            },
+            {
+                label: "Never use automod embeds",
+                value: "never",
+                default: true
+            }
+        ]
+    },
+    listMode: {
+        description: "Whether to use ID list as blacklist or whitelist",
+        type: OptionType.SELECT,
+        options: [
+            {
+                label: "Blacklist",
+                value: "blacklist",
+                default: true
+            },
+            {
+                label: "Whitelist",
+                value: "whitelist"
+            }
+        ]
+    },
+    idList: {
+        displayName: "ID List",
+        description: "Guild/channel/user IDs to blacklist or whitelist (separate with comma)",
+        type: OptionType.STRING,
+        default: "",
+        multiline: true,
+    },
+    clearMessageCache: {
+        type: OptionType.COMPONENT,
+        component: () => (
+            <Button onClick={() => { messageCache.clear(); cooldownLogged.clear(); }}>
+                Clear the linked message cache
+            </Button>
+        )
+    }
+});
+
+/**
+ * How long to wait before retrying a link whose fetch failed. Long enough that a passing
+ * outage does not turn into one request per render pass per link (the fetch queue is
+ * unbounded), short enough that a transient failure is not cached for the whole session.
+ */
+const FETCH_RETRY_DELAY_MS = 30_000;
+
+async function fetchMessage(channelId: string, messageId: string) {
+    const cacheKey = getCacheKey(channelId, messageId);
+
+    const cached = messageCache.get(cacheKey);
+    if (cached) {
+        // A resolved message is the final answer.
+        if (cached.message !== undefined) return cached.message;
+        // A retry cooldown is not an answer, but it does mean "do not re-request yet".
+        if (cached.retryAfter !== undefined && Date.now() < cached.retryAfter) return undefined;
+        // Expired cooldown: drop it so a dead link does not hold a slot for the session.
+        messageCache.delete(cacheKey);
+        cooldownLogged.delete(cacheKey);
+    }
+
+    // In-flight marker so concurrent renders of the same link do not stack requests.
+    messageCache.set(cacheKey, { fetched: false });
+
+    let msg: Awaited<ReturnType<typeof TestcordRequestCoordinator.fetchMessageAround>>;
+    try {
+        msg = await TestcordRequestCoordinator.fetchMessageAround(channelId, messageId);
+    } catch (e) {
+        // A transport failure is not an answer about the message. Back off instead of
+        // caching the blank forever (the old behaviour) or retrying on every render pass
+        // (a request storm, since the fetch queue is unbounded). A "message is gone"
+        // verdict is conclusive, so that one stays cached unconditionally.
+        messageCache.set(cacheKey, { fetched: false, retryAfter: Date.now() + FETCH_RETRY_DELAY_MS });
+        // Never log this per attempt. This runs as a message decoration, so every visible
+        // message with a link that cannot be fetched lands here, and an error-level log per
+        // failure means a console entry, a DevTools update and a renderer_js.log write for
+        // each one - measurably enough to make the whole client feel heavy when link
+        // previews are unreachable. Once per cooldown window per key is enough to notice;
+        // the failure is a transport outcome, not an actionable error.
+        if (!cooldownLogged.has(cacheKey)) {
+            cooldownLogged.add(cacheKey);
+            logger.debug(`Link preview unavailable for ${messageId}; backing off for ${FETCH_RETRY_DELAY_MS / 1000}s`);
+        }
+        return;
+    }
+
+    if (!msg) return;
+
+    if (msg.id !== messageId) return;
+
+    const message = MessageStore.getMessages(msg.channel_id).receiveMessage(msg).get(msg.id);
+    if (!message) return;
+
+    messageCache.set(cacheKey, {
+        message,
+        fetched: true
+    });
+    cooldownLogged.delete(cacheKey);
+
+    return message;
+}
+
+function getImages(message: Message): Attachment[] {
+    const attachments: Attachment[] = [];
+
+    for (const { content_type, height, width, url, proxy_url } of message.attachments ?? []) {
+        if (content_type?.startsWith("image/"))
+            attachments.push({
+                height: height!,
+                width: width!,
+                url: url,
+                proxyURL: proxy_url!
+            });
+    }
+
+    for (const { type, image, thumbnail, url } of message.embeds ?? []) {
+        if (type === "image")
+            attachments.push({ ...(image ?? thumbnail!) });
+        else if (url && type === "gifv" && !tenorRegex.test(url))
+            attachments.push({
+                height: thumbnail!.height,
+                width: thumbnail!.width,
+                url
+            });
+    }
+
+    return attachments;
+}
+
+function noContent(attachments: number, embeds: number) {
+    if (!attachments && !embeds) return "";
+    if (!attachments) return `[no content, ${embeds} embed${embeds !== 1 ? "s" : ""}]`;
+    if (!embeds) return `[no content, ${attachments} attachment${attachments !== 1 ? "s" : ""}]`;
+    return `[no content, ${attachments} attachment${attachments !== 1 ? "s" : ""} and ${embeds} embed${embeds !== 1 ? "s" : ""}]`;
+}
+
+function requiresRichEmbed(message: Message) {
+    if (message.components.length) return true;
+    if (message.attachments.some(a => !a.content_type?.startsWith("image/"))) return true;
+    if (message.embeds.some(e => e.type !== "image" && (e.type !== "gifv" || tenorRegex.test(e.url!)))) return true;
+
+    return false;
+}
+
+function computeWidthAndHeight(width: number, height: number) {
+    const maxWidth = 400;
+    const maxHeight = 300;
+
+    if (width > height) {
+        const adjustedWidth = Math.min(width, maxWidth);
+        return { width: adjustedWidth, height: Math.round(height / (width / adjustedWidth)) };
+    }
+
+    const adjustedHeight = Math.min(height, maxHeight);
+    return { width: Math.round(width / (height / adjustedHeight)), height: adjustedHeight };
+}
+
+function withEmbeddedBy(message: Message, embeddedBy: string[]) {
+    return new Proxy(message, {
+        get(_, prop) {
+            if (prop === "vencordEmbeddedBy") return embeddedBy;
+            // @ts-expect-error ts so bad
+            return Reflect.get(...arguments);
+        }
+    });
+}
+
+function MessageEmbedAccessory({ message }: { message: Message; }) {
+    // @ts-expect-error
+    const embeddedBy: string[] = message.vencordEmbeddedBy ?? [];
+
+    const accessories = [] as (JSX.Element | null)[];
+
+    const seen = new Set<string>();
+    let count = 0;
+    for (const [_, channelId, messageId] of message.content!.matchAll(messageLinkRegex)) {
+        if (embeddedBy.includes(messageId) || embeddedBy.length > 2 || seen.has(messageId) || count >= 5) {
+            continue;
+        }
+
+        seen.add(messageId);
+        count++;
+
+        const linkedChannel = ChannelStore.getChannel(channelId);
+        if (!linkedChannel || (!linkedChannel.isPrivate() && !PermissionStore.can(PermissionsBits.VIEW_CHANNEL, linkedChannel))) {
+            continue;
+        }
+
+        const { listMode, idList } = settings.store;
+
+        const isListed = [linkedChannel.guild_id, channelId, message.author.id].some(id => id && idList.includes(id));
+
+        if (listMode === "blacklist" && isListed) continue;
+        if (listMode === "whitelist" && !isListed) continue;
+
+        const cacheKey = getCacheKey(channelId, messageId);
+        let linkedMessage = messageCache.get(cacheKey)?.message;
+        if (!linkedMessage) {
+            linkedMessage ??= MessageStore.getMessage(channelId, messageId);
+            if (linkedMessage) {
+                messageCache.set(cacheKey, { message: linkedMessage, fetched: true });
+            } else {
+
+                messageFetchQueue.unshift(() => fetchMessage(channelId, messageId)
+                    .then(m => m && updateMessage(message.channel_id, message.id))
+                );
+                continue;
+            }
+        }
+
+        const messageProps: MessageEmbedProps = {
+            message: withEmbeddedBy(linkedMessage, [...embeddedBy, message.id]),
+            channel: linkedChannel
+        };
+
+        const type = settings.store.automodEmbeds;
+        accessories.push(
+            type === "always" || (type === "prefer" && !requiresRichEmbed(linkedMessage))
+                ? <AutomodEmbedAccessory {...messageProps} />
+                : <ChannelMessageEmbedAccessory {...messageProps} />
+        );
+    }
+
+    return accessories.length ? <>{accessories}</> : null;
+}
+
+function getChannelLabelAndIconUrl(channel: Channel) {
+    if (channel.isDM()) return ["Direct Message", IconUtils.getUserAvatarURL(UserStore.getUser(channel.recipients[0]))];
+    if (channel.isGroupDM()) return ["Group DM", IconUtils.getChannelIconURL(channel)];
+    return ["Server", IconUtils.getGuildIconURL(GuildStore.getGuild(channel.guild_id))];
+}
+
+function ChannelMessageEmbedAccessory({ message, channel }: MessageEmbedProps): JSX.Element | null {
+    const compact = MessageDisplayCompact.useSetting();
+
+    const dmReceiver = UserStore.getUser(ChannelStore.getChannel(channel.id).recipients?.[0]);
+
+    const [channelLabel, iconUrl] = getChannelLabelAndIconUrl(channel);
+
+    return (
+        <Embed
+            embed={{
+                rawDescription: "",
+                color: "var(--background-base-lower)",
+                author: {
+                    name: <BaseText size="xs" weight="medium" tag="span">
+                        <span>{channelLabel} - </span>
+                        {Parser.parse(channel.isDM() ? `<@${dmReceiver.id}>` : `<#${channel.id}>`)}
+                    </BaseText>,
+                    iconProxyURL: iconUrl
+                }
+            }}
+            renderDescription={() => (
+                <div key={message.id} style={!settings.store.messageBackgroundColor ? undefined : {
+                    backgroundColor: "var(--background-base-lower)",
+                    border: "1px solid var(--border-subtle)",
+                    borderRadius: "8px",
+                    paddingBottom: "8px",
+                }}>
+                    <ChannelMessage
+                        id={`message-link-embeds-${message.id}`}
+                        message={message}
+                        channel={channel}
+                        subscribeToComponentDispatch={false}
+                        compact={compact}
+                    />
+                </div>
+            )}
+        />
+    );
+}
+
+function AutomodEmbedAccessory(props: MessageEmbedProps): JSX.Element | null {
+    const { message, channel } = props;
+    const compact = MessageDisplayCompact.useSetting();
+    const images = getImages(message);
+    const { parse } = Parser;
+
+    const [channelLabel, iconUrl] = getChannelLabelAndIconUrl(channel);
+
+    return <AutoModEmbed
+        channel={channel}
+        childrenAccessories={
+            <BaseText size="xs" weight="medium" color="text-muted" tag="span" className={`${EmbedClasses.embedAuthor} ${EmbedClasses.embedMargin}`}>
+                {iconUrl && <img src={iconUrl} className={EmbedClasses.embedAuthorIcon} alt="" />}
+                <span>
+                    <span>{channelLabel} - </span>
+                    {channel.isDM()
+                        ? Parser.parse(`<@${ChannelStore.getChannel(channel.id).recipients[0]}>`)
+                        : Parser.parse(`<#${channel.id}>`)
+                    }
+                </span>
+            </BaseText>
+        }
+        compact={compact}
+        content={
+            <>
+                {message.content || message.attachments.length <= images.length
+                    ? parse(message.content)
+                    : [noContent(message.attachments.length, message.embeds.length)]
+                }
+                {images.map((a, idx) => {
+                    const { width, height } = computeWidthAndHeight(a.width, a.height);
+                    return (
+                        <div key={idx}>
+                            <img src={a.proxyURL ?? a.url} width={width} height={height} />
+                        </div>
+                    );
+                })}
+            </>
+        }
+        hideTimestamp={false}
+        message={message}
+        _messageEmbed="automod"
+    />;
+}
+
+export default definePlugin({
+    name: "MessageLinkEmbeds",
+    description: "Adds a preview to messages that link another message",
+    tags: ["Chat", "Appearance"],
+    authors: [Devs.TheSun, Devs.Ven, Devs.RyanCaoDev],
+    dependencies: ["MessageAccessoriesAPI", "MessageUpdaterAPI", "UserSettingsAPI"],
+
+    settings,
+
+    patches: [
+        {
+            find: "!1,withFooter:",
+            replacement: {
+                match: /(?=function (\i)\(\i\){let{message:\i,channel:\i,[^}]+?withFooter:)/,
+                replace: "$self.AutoModEmbed=$1;"
+            }
+        }
+    ],
+
+    set AutoModEmbed(value: any) {
+        AutoModEmbed = value;
+    },
+
+    start() {
+        addMessageAccessory("MessageLinkEmbeds", props => {
+            if (!messageLinkRegex.test(props.message.content))
+                return null;
+
+            // need to reset the regex because it's global
+            messageLinkRegex.lastIndex = 0;
+
+            return (
+                <MessageEmbedAccessory
+                    message={props.message}
+                />
+            );
+        }, 4 /* just above rich embeds */);
+    },
+    stop() {
+        removeMessageAccessory("MessageLinkEmbeds");
+    }
+});

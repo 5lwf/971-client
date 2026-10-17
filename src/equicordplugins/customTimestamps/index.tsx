@@ -1,0 +1,269 @@
+/*
+ * Vencord, a Discord client mod
+ * Copyright (c) 2025 Vendicated and contributors
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
+import "./style.css";
+
+import { definePluginSettings, useSettings } from "@api/Settings";
+import { Divider } from "@components/Divider";
+import { Heading, HeadingPrimary } from "@components/Heading";
+import { Link } from "@components/Link";
+import { Paragraph } from "@components/Paragraph";
+import { Devs, EquicordDevs } from "@utils/constants";
+import { Margins } from "@utils/margins";
+import definePlugin, { OptionType } from "@utils/types";
+import { moment, TextInput, useEffect, useReducer, useState } from "@webpack/common";
+
+import { DemoMessageContainer, timeFormats } from "./utils";
+
+// ── Global 1s ticker: 1 interval for all timestamps instead of N per-message intervals ──
+const tickListeners = new Set<() => void>();
+let tickInterval: ReturnType<typeof setInterval> | null = null;
+function ensureTicker() {
+    if (tickInterval !== null) return;
+    tickInterval = setInterval(() => {
+        formatCache.clear();
+        for (const cb of tickListeners) try { cb(); } catch { }
+    }, 1000);
+}
+function subscribeTick(cb: () => void) {
+    tickListeners.add(cb);
+    ensureTicker();
+    return () => {
+        tickListeners.delete(cb);
+        if (tickListeners.size === 0 && tickInterval !== null) {
+            clearInterval(tickInterval);
+            tickInterval = null;
+        }
+    };
+}
+function useGlobalTick(enabled: boolean) {
+    const [, forceUpdate] = useReducer(x => x + 1, 0);
+    useEffect(() => {
+        if (!enabled) return;
+        return subscribeTick(forceUpdate);
+    }, [enabled]);
+}
+
+// Output is identical for every timestamp in the same second with the same
+// template, so cache by second + template. Cleared each tick. Bounded so a
+// scrollback of distinct timestamps can't grow it without limit.
+const formatCache = new Map<string, string>();
+const FORMAT_CACHE_MAX = 512;
+
+type TimeFormat = {
+    name: string;
+    description: string;
+    default: string;
+    offset: number;
+};
+type TimeRowProps = {
+    id: string;
+    format: TimeFormat;
+    onChange: (key: string, value: string) => void;
+    pluginSettings: any;
+};
+
+// Timestamp's `timestamp` prop is `Date | Moment`. A Moment has toDate() but no
+// getTime(), so normalise before anything calls getTime() on it.
+function toDate(input: unknown): Date | null {
+    if (input instanceof Date) return Number.isNaN(input.getTime()) ? null : input;
+    const date = (input as { toDate?: () => unknown } | null)?.toDate?.();
+    return date instanceof Date && !Number.isNaN(date.getTime()) ? date : null;
+}
+
+const format = (date: Date, formatTemplate: string): string => {
+    const second = Math.floor(date.getTime() / 1000);
+    const key = `${second}|${formatTemplate}`;
+    const cached = formatCache.get(key);
+    if (cached !== undefined) return cached;
+
+    const mmt = moment(date);
+
+    // One settings read per call. These used to be four separate `settings.store.formats.X`
+    // chains, and every `formats.*` key the user never customised is absent from the stored
+    // object, so each of those reads went through SettingsStore.getDefaultValue.
+    const { formats } = settings.store;
+
+    const sameDayFormat = formats?.sameDayFormat || timeFormats.sameDayFormat.default;
+    const lastDayFormat = formats?.lastDayFormat || timeFormats.lastDayFormat.default;
+    const lastWeekFormat = formats?.lastWeekFormat || timeFormats.lastWeekFormat.default;
+    const sameElseFormat = formats?.sameElseFormat || timeFormats.sameElseFormat.default;
+
+    const out = mmt.format(formatTemplate)
+        .replace("calendar", () => mmt.calendar(moment(), {
+            sameDay: sameDayFormat,
+            lastDay: lastDayFormat,
+            lastWeek: lastWeekFormat,
+            sameElse: sameElseFormat
+        }))
+        .replace("relative", () => mmt.fromNow());
+
+    if (formatCache.size >= FORMAT_CACHE_MAX) {
+        const oldest = formatCache.keys().next().value;
+        if (oldest !== undefined) formatCache.delete(oldest);
+    }
+    formatCache.set(key, out);
+    return out;
+};
+
+const TimeRow = (props: TimeRowProps) => {
+    const [state, setState] = useState(props.pluginSettings?.[props.id] || props.format.default);
+
+    const handleChange = (value: string) => {
+        setState(value);
+        props.onChange(props.id, value);
+    };
+
+    return (
+        <>
+            <Heading>{props.format.name}</Heading>
+            <Paragraph>{props.format.description}</Paragraph>
+            <TextInput value={state} onChange={handleChange} />
+        </>
+    );
+};
+
+const settings = definePluginSettings({
+    formats: {
+        type: OptionType.COMPONENT,
+        description: "Customize the timestamp formats",
+        component: componentProps => {
+            const [settingsState, setSettingsState] = useState(useSettings().plugins?.CustomTimestamps?.formats ?? {});
+
+            const setNewValue = (key: string, value: string) => {
+                const newSettings = { ...settingsState, [key]: value };
+                setSettingsState(newSettings);
+                componentProps.setValue(newSettings);
+            };
+
+            return (
+                <>
+                    <DemoMessageContainer />
+                    {Object.entries(timeFormats).map(([key, value]) => (
+                        <section key={key}>
+                            {key === "sameDayFormat" && (
+                                <div className={Margins.bottom20}>
+                                    <Divider style={{ marginBottom: "10px" }} />
+                                    <Heading tag="h1">Calendar formats</Heading>
+                                    <Paragraph>
+                                        How to format the [calendar] value if used in the above timestamps.
+                                    </Paragraph>
+                                </div>
+                            )}
+                            <TimeRow
+                                id={key}
+                                format={value}
+                                onChange={setNewValue}
+                                pluginSettings={settingsState}
+                            />
+                        </section>
+                    ))}
+                </>);
+        }
+    }
+}).withPrivateSettings<{
+    formats: {
+        cozyFormat: string;
+        compactFormat: string;
+        tooltipFormat: string;
+        ariaLabelFormat: string;
+        sameDayFormat: string;
+        lastDayFormat: string;
+        lastWeekFormat: string;
+        sameElseFormat: string;
+    };
+}>();
+
+export default definePlugin({
+    name: "CustomTimestamps",
+    description: "Custom timestamps on messages and tooltips",
+    tags: ["Appearance", "Customisation"],
+    authors: [Devs.Rini, EquicordDevs.nvhhr, EquicordDevs.Suffocate, Devs.Obsidian],
+    settings,
+    settingsAboutComponent: () => (
+        <div className={"vc-cmt-info-card"}>
+            <HeadingPrimary>How to use:</HeadingPrimary>
+            <Paragraph>
+                <Link href="https://momentjs.com/docs/#/displaying/format/">Moment.js formatting documentation</Link>
+                <div className={Margins.top8}>
+                    Additionally you can use these in your inputs:<br />
+                    <b>[calendar]</b> enables dynamic date formatting such
+                    as &quot;Today&quot; or &quot;Yesterday&quot;.<br />
+                    <b>[relative]</b> gives you times such as &quot;4 hours ago&quot;.<br />
+                </div>
+            </Paragraph>
+        </div>
+    ),
+    patches: [
+        {
+            find: "#{intl::MESSAGE_EDITED_TIMESTAMP_A11Y_LABEL}",
+            replacement: [
+                {
+                    // Aria label on timestamps
+                    match: /\i.useMemo\(.{0,10}\i\.\i\)\(.{0,10}\]\)/,
+                    replace: "$self.renderTimestamp(arguments[0].timestamp,'ariaLabel')"
+                },
+                {
+                    // Timestamps on messages
+                    match: /\i\.useMemo\(.{0,50}"LT".{0,30}\]\)/,
+                    replace: "$self.renderTimestamp(arguments[0].timestamp,arguments[0].compact?'compact':'cozy')",
+                },
+                {
+                    // Tooltips when hovering over message timestamps
+                    match: /(__unsupportedReactNodeAsText:).{0,25}"LLLL"\)/,
+                    replace: "$1$self.renderTimestamp(arguments[0].timestamp,'tooltip')",
+                },
+            ]
+        },
+        {
+            find: ".MINUTE],[45*",
+            replacement: {
+                // Tooltips for timestamp markdown (e.g. <t:1234567890>)
+                match: /(__unsupportedReactNodeAsText:)\i.full/,
+                replace: "$1$self.renderTimestamp(new Date(arguments[0].node.timestamp*1000),'tooltip')"
+            }
+        }
+    ],
+
+    start() {
+        moment.relativeTimeThreshold("s", 60);
+        moment.relativeTimeThreshold("ss", -1);
+        moment.relativeTimeThreshold("m", 60);
+    },
+
+    stop() {
+        if (tickInterval !== null) {
+            clearInterval(tickInterval);
+            tickInterval = null;
+        }
+        tickListeners.clear();
+        formatCache.clear();
+    },
+
+    renderTimestamp: (input: unknown, type: "cozy" | "compact" | "tooltip" | "ariaLabel") => {
+        let formatTemplate: string;
+
+        switch (type) {
+            case "cozy":
+                formatTemplate = settings.store.formats?.cozyFormat || timeFormats.cozyFormat.default;
+                break;
+            case "compact":
+                formatTemplate = settings.store.formats?.compactFormat || timeFormats.compactFormat.default;
+                break;
+            case "tooltip":
+                formatTemplate = settings.store.formats?.tooltipFormat || timeFormats.tooltipFormat.default;
+                break;
+            case "ariaLabel":
+                formatTemplate = settings.store.formats?.ariaLabelFormat || timeFormats.ariaLabelFormat.default;
+        }
+
+        const needsTick = formatTemplate.includes("calendar") || formatTemplate.includes("relative");
+        useGlobalTick(needsTick);
+
+        const date = toDate(input);
+        return date ? format(date, formatTemplate) : "";
+    }
+});
